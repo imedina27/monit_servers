@@ -1,0 +1,24 @@
+# Plantilla del inventario central de servidores.
+# Copia este archivo a "inventario_servidores.yaml" y completa los datos reales.
+# inventario_servidores.yaml NO se sube a Git (ver .gitignore).
+
+servidores:
+  - nombre: servidor_01
+    sistema_operativo: ubuntu       # ubuntu | windows
+    activo: true
+    ip: 192.168.192.XXX
+    puerto: 22
+    usuario: tu_usuario
+    password: tu_password
+    # Debe coincidir con 'directorio_salida' del config.ini del colector en ese servidor
+    directorio_remoto: /home/tu_usuario/check/monit_servers_v2/colector_ubuntu/lecturas
+
+  # Agrega mas servidores copiando el bloque de arriba
+  # - nombre: servidor_02
+  #   sistema_operativo: ubuntu
+  #   activo: true
+  #   ip: 192.168.192.YYY
+  #   puerto: 22
+  #   usuario: tu_usuario
+  #   password: tu_password
+  #   directorio_remoto: /home/tu_usuario/check/monit_servers_v2/colector_ubuntu/lecturas
