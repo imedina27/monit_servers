@@ -1,0 +1,15 @@
+# Umbrales de temperatura para el semaforo (verde/ambar/rojo) del widget.
+# VALORES PROVISIONALES - pendiente de confirmar los reales con el usuario
+# (ver ROADMAP.md, seccion "Pendiente de decidir").
+#
+# verde: temperatura_c <= verde_max
+# ambar: verde_max < temperatura_c <= ambar_max
+# rojo:  temperatura_c > ambar_max
+
+cpu:
+  verde_max: 70
+  ambar_max: 85
+
+gpu:
+  verde_max: 75
+  ambar_max: 85
