@@ -1,0 +1,13 @@
+# Credenciales / inventario real (usar inventario_servidores.yaml.example como plantilla)
+inventario_servidores.yaml
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Logs y datos generados
+*.log
+colector_ubuntu/lecturas/
+ingesta/pendientes_offline/
