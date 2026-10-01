@@ -182,6 +182,24 @@ pipenv run python ingesta/ingesta.py
 
 Revisa `ingesta/ingesta.log` para ver qué se cargó. Automatizar esto con un scheduler (Task Scheduler de Windows) queda pendiente — por ahora los archivos simplemente se acumulan en cada servidor hasta la siguiente corrida manual.
 
+### Respaldo y restauración de la base de datos
+
+Para recuperarse de un formateo de la máquina central, respalda `monit_srv` de vez en cuando (2-3 veces al mes):
+
+```bash
+pipenv run python db/respaldar.py
+```
+
+Genera `bkp/Data_Base/{nombre_bd}_{ddmmaa}.sql` (carpeta gitignored — no se sube a GitHub).
+
+Para restaurar (sobreescribe por completo la base actual):
+
+```bash
+pipenv run python db/restaurar.py bkp/Data_Base/monit_srv_011026.sql
+```
+
+Si no indicas el archivo, te deja elegir entre los respaldos disponibles en `bkp/Data_Base/`. Pide confirmación explícita antes de ejecutar, ya que reemplaza todo el contenido de la base.
+
 ## Estructura del proyecto
 
 ```text
@@ -206,7 +224,11 @@ Monit_Servers_V2/
 │   └── assets/
 │
 ├── db/
-│   └── schema.sql
+│   ├── schema.sql
+│   ├── respaldar.py
+│   └── restaurar.py
+│
+├── bkp/Data_Base/                         ← (gitignored) respaldos .sql generados por respaldar.py
 │
 ├── inventario_servidores.yaml.example     ← plantilla versionada
 ├── inventario_servidores.yaml             ← (gitignored) datos reales de los servidores

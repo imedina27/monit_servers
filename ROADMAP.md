@@ -123,7 +123,7 @@ Se eligió **FastAPI** (sobre Flask, que el README dejaba como alternativa) por 
 - Página que consume la API del paso 6 y grafica variaciones de temperatura (por hora/día/mes).
 - Aplicar imagen empresarial de Quantum (colores, logo, tipografía corporativa).
 
-### Implementado ✅ (validación visual pendiente del usuario)
+### Implementado y validado visualmente ✅
 
 Dashboard en [`dashboard/`](dashboard/), servido por el backend (`app.mount("/", StaticFiles(...))`); la API se movió a `/api/*` para no chocar con el mount.
 
@@ -132,27 +132,39 @@ Dashboard en [`dashboard/`](dashboard/), servido por el backend (`app.mount("/",
 - **Semáforo**: mismos colores ya usados en `Cam_Lens_V2/styles/stylesheet.py` (verde `#2FA36B`, ámbar `#E0902E`, rojo `#D9534F`) — consistencia entre herramientas internas de Quantum.
 - **Colores de las líneas de la gráfica** (distintos del semáforo, para no mezclar "estado" con "identidad de serie"): paleta categórica validada del skill de dataviz, saltando el slot "naranja" porque choca con el acento de marca. *Nota: no pude correr el validador (`node` no está instalado en esta máquina) — usé los valores ya validados por el skill contra sus superficies de referencia (muy cercanas a las nuestras), no una validación exacta contra `#040918`.*
 - **Contenido**: tarjetas de estado actual (CPU = núcleo más caliente, no promedio — para no esconder un core sobrecalentado; una tarjeta por GPU), tabla expandible con todos los sensores, gráfica histórica con selector hora/día/mes, leyenda, tooltip al pasar el mouse. Refresco automático cada 5 minutos.
-- **Probado**: arranqué el servidor y verifiqué con `curl` que el HTML, CSS, JS, fuentes, imágenes y los 3 endpoints de la API se sirven correctamente (200, content-type correcto) contra los datos reales de DEVELOP. **No pude verificar el renderizado visual real** (no hay `Node.js` ni `chromium-cli` en esta máquina para una captura automatizada) — abrí la página en tu navegador para que la confirmes tú.
+- **Probado**: arranqué el servidor y verifiqué con `curl` que el HTML, CSS, JS, fuentes, imágenes y los 3 endpoints de la API se sirven correctamente (200, content-type correcto) contra los datos reales de DEVELOP. El renderizado visual lo confirmó el usuario directamente en su navegador (no hay `Node.js`/`chromium-cli` en esta máquina para una captura automatizada propia).
+- **Ajustes pedidos por el usuario tras la primera revisión**: logo del header 3x más grande, título centrado "Server Temperature Monitor", selector de servidor movido de la barra superior al encabezado de la sección "Estado actual".
+- Instrucciones de instalación del backend + dashboard agregadas al [README.md](README.md) (crear `.env`, aplicar `db/schema.sql`, configurar inventario, levantar `uvicorn`).
 
-## 8. Widget de Rainmeter
+## 8. Respaldo y restauración de la base de datos
+
+- Scripts de línea de comandos para respaldar/restaurar `monit_srv` completa, pensados para recuperarse de un formateo de la máquina central.
+
+### Implementado y probado ✅
+
+- [`db/respaldar.py`](db/respaldar.py): corre `pg_dump --clean --if-exists` (credenciales desde `.env`) y guarda en `bkp/Data_Base/{DB_NAME}_{ddmmaa}.sql` (carpeta gitignored). `--clean --if-exists` hace que el archivo incluya los `DROP` necesarios, para que restaurar deje la base exactamente como el respaldo, sin conflictos.
+- [`db/restaurar.py`](db/restaurar.py): acepta la ruta del archivo como argumento, o si no se da ninguno, lista los respaldos disponibles en `bkp/Data_Base/` para elegir uno interactivamente. Pide confirmación explícita (`escribe 'si'`) antes de sobreescribir — la restauración reemplaza todo el contenido de la base, a propósito. Si la base no existe (ej. máquina recién formateada), la crea antes de restaurar.
+- **Probado end-to-end**: respaldo real de `monit_srv` → se vació la base a propósito (`TRUNCATE`) → restaurada desde el respaldo → conteos de filas idénticos a los originales (26 lecturas, 2 archivos_ingeridos).
+
+## 9. Widget de Rainmeter
 
 - Mostrar temperatura por hora de 2-3 servidores seleccionados, consumiendo la API (plugin `WebParser`).
 
-## 9. Indicador tipo semáforo en el widget
+## 10. Indicador tipo semáforo en el widget
 
 - Junto a cada temperatura, un punto de color según rango: Verde (normal), Ámbar (advertencia), Rojo (crítico).
 - El color se calcula en el backend (paso 6), no en el widget ni en el dashboard.
 - **Decisión**: los umbrales viven en un archivo YAML que lee el backend (no en la BD) — más simple; cambiarlos implica editar el archivo y reiniciar el servicio.
 - Falta definir los valores exactos de los umbrales por tipo de sensor (CPU/GPU).
 
-## 10. Validación end-to-end (opcional, recomendado)
+## 11. Validación end-to-end (opcional, recomendado)
 
 - Prueba completa del flujo: colector → ingesta → BD → dashboard/widget, con al menos un servidor Ubuntu y uno Windows reales antes de dar el proyecto por cerrado.
 
 ## Pendiente de decidir
 
-- Valores exactos de los umbrales de temperatura para el semáforo (paso 9) — ya se decidió que viven en un YAML leído por el backend.
-- Detalles de la imagen empresarial Quantum a aplicar (paso 7).
+- Valores exactos de los umbrales de temperatura para el semáforo (paso 10) — ya se decidió que viven en un YAML leído por el backend (`backend/umbrales.yaml`); los que hay ahí son provisionales (70/85°C CPU, 75/85°C GPU).
+- ~~Detalles de la imagen empresarial Quantum a aplicar (paso 7).~~ Resuelto — colores, logo y tipografía reales ya aplicados en el dashboard (paso 7).
 - **Ambiente conda para `colector_ubuntu`** (paso 1 / instalación): el usuario quiere que la instalación en servidores use un ambiente virtual con conda antes de todo. Pendiente: por qué `conda` no aparece en DEVELOP (`which conda` no encontró nada, ni en rutas comunes) — el usuario lo va a verificar. Una vez resuelto, falta decidir nombre del ambiente y versión de Python, y documentarlo en el README.
 - **Instalar el servicio systemd real en DEVELOP**: por ahora `colector_ubuntu` solo se corrió manualmente ahí para pruebas (ver paso 5); falta copiar `monit_servers_v2.service` a `/etc/systemd/system/` y habilitarlo para que quede corriendo de forma persistente.
 

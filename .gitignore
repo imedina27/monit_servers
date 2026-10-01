@@ -11,3 +11,4 @@ __pycache__/
 *.log
 colector_ubuntu/lecturas/
 ingesta/pendientes_offline/
+bkp/
