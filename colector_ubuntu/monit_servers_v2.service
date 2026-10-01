@@ -1,0 +1,24 @@
+[Unit]
+Description=Monitor de Temperaturas V2 (Monit_Servers_V2 - no confundir con el servicio viejo 'monit_servers')
+After=network.target
+
+[Service]
+# Cambia 'quantum' por el usuario real del servidor
+User=quantum
+
+# Cambia la ruta al directorio donde clonaste el repositorio
+WorkingDirectory=/home/quantum/check/monit_servers_v2/colector_ubuntu
+
+# Ruta completa al python3 y al script
+ExecStart=/usr/bin/python3 /home/quantum/check/monit_servers_v2/colector_ubuntu/monitor.py
+
+# Si el servicio falla, reiniciarlo automaticamente despues de 10 segundos
+Restart=on-failure
+RestartSec=10
+
+# Redirigir logs del sistema al archivo monitor.log
+StandardOutput=append:/home/quantum/check/monit_servers_v2/colector_ubuntu/monitor.log
+StandardError=append:/home/quantum/check/monit_servers_v2/colector_ubuntu/monitor.log
+
+[Install]
+WantedBy=multi-user.target
