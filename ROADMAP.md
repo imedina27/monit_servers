@@ -146,6 +146,10 @@ Dashboard en [`dashboard/`](dashboard/), servido por el backend (`app.mount("/",
 - [`db/restaurar.py`](db/restaurar.py): acepta la ruta del archivo como argumento, o si no se da ninguno, lista los respaldos disponibles en `bkp/Data_Base/` para elegir uno interactivamente. Pide confirmación explícita (`escribe 'si'`) antes de sobreescribir — la restauración reemplaza todo el contenido de la base, a propósito. Si la base no existe (ej. máquina recién formateada), la crea antes de restaurar.
 - **Probado end-to-end**: respaldo real de `monit_srv` → se vació la base a propósito (`TRUNCATE`) → restaurada desde el respaldo → conteos de filas idénticos a los originales (26 lecturas, 2 archivos_ingeridos).
 
+### Extra: migración de históricos del proyecto viejo ✅
+
+Se agregó [`db/migrar_historico_csv.py`](db/migrar_historico_csv.py) para convertir los CSV anchos del proyecto viejo (`cpu_*`/`gpu_*`) al formato largo e insertarlos en `lecturas`. Se usó para importar el histórico real de DEVELOP y MINI_LENOVO (marzo–octubre 2026, ~98,000 lecturas) — el dashboard ya tiene 7 meses de datos reales para probar agrupación por día/mes, no solo por hora.
+
 ## 9. Widget de Rainmeter
 
 - Mostrar temperatura por hora de 2-3 servidores seleccionados, consumiendo la API (plugin `WebParser`).

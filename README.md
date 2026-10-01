@@ -182,6 +182,16 @@ pipenv run python ingesta/ingesta.py
 
 Revisa `ingesta/ingesta.log` para ver qué se cargó. Automatizar esto con un scheduler (Task Scheduler de Windows) queda pendiente — por ahora los archivos simplemente se acumulan en cada servidor hasta la siguiente corrida manual.
 
+### Migrar datos históricos del proyecto viejo (CSV ancho → formato largo)
+
+Si tienes CSVs descargados con el esquema viejo (`Monit_Servers/windows/descargar_csv.py`, columnas `cpu_*`/`gpu_*`), puedes importarlos a la base nueva:
+
+```bash
+pipenv run python db/migrar_historico_csv.py "C:\ruta\a\la\carpeta\CSV"
+```
+
+Un archivo por servidor (`DEVELOP.csv`, `MINI_LENOVO.csv`, etc., el nombre del archivo debe coincidir con el nombre del servidor). Convierte cada columna a formato largo y la inserta con `ON CONFLICT DO NOTHING` — correrlo dos veces no duplica nada.
+
 ### Respaldo y restauración de la base de datos
 
 Para recuperarse de un formateo de la máquina central, respalda `monit_srv` de vez en cuando (2-3 veces al mes):
@@ -225,6 +235,7 @@ Monit_Servers_V2/
 │
 ├── db/
 │   ├── schema.sql
+│   ├── migrar_historico_csv.py
 │   ├── respaldar.py
 │   └── restaurar.py
 │
