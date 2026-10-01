@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitoreo de Temperaturas - Quantum Labs</title>
+<link rel="icon" type="image/png" href="assets/img/icono-naranja.png">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<header class="encabezado">
+    <div class="encabezado__marca">
+        <img id="logo" class="encabezado__logo" src="assets/img/logo-horizontal-naranja.png" alt="Quantum Labs">
+    </div>
+    <h1 class="encabezado__titulo">Server Temperature Monitor</h1>
+    <div class="encabezado__controles">
+        <button id="boton-tema" class="boton-tema" title="Cambiar tema" aria-label="Cambiar tema">
+            <img id="icono-tema" src="assets/img/tema-oscuro.png" alt="">
+        </button>
+    </div>
+</header>
+
+<main>
+    <section id="seccion-actual">
+        <div class="seccion__encabezado">
+            <h2>Estado actual</h2>
+            <select id="selector-servidor" class="selector">
+                <option value="">Cargando servidores...</option>
+            </select>
+        </div>
+        <div id="tarjetas" class="tarjetas"></div>
+        <details>
+            <summary>Ver todos los sensores</summary>
+            <table>
+                <thead>
+                    <tr><th>Componente</th><th>Sensor</th><th>Temperatura</th><th>Estado</th><th>Medido en</th></tr>
+                </thead>
+                <tbody id="tabla-sensores"></tbody>
+            </table>
+        </details>
+    </section>
+
+    <section id="seccion-historico">
+        <h2>Histórico</h2>
+        <div class="historico__controles" id="chips-agrupacion">
+            <button class="chip" data-agrupacion="hora" aria-pressed="true">Por hora</button>
+            <button class="chip" data-agrupacion="dia" aria-pressed="false">Por día</button>
+            <button class="chip" data-agrupacion="mes" aria-pressed="false">Por mes</button>
+        </div>
+        <div class="grafica-contenedor">
+            <div id="leyenda" class="leyenda"></div>
+            <svg id="grafica" width="100%" height="320" role="img" aria-label="Gráfica de temperatura en el tiempo"></svg>
+        </div>
+    </section>
+</main>
+
+<script src="assets/js/app.js"></script>
+</body>
+</html>

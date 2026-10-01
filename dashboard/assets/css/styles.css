@@ -1,0 +1,319 @@
+/* ============================================================
+   Tipografia: Libre Franklin (Quantum Labs), autohospedada
+   ============================================================ */
+@font-face {
+    font-family: "Libre Franklin";
+    src: url("../fonts/LibreFranklin-Regular.ttf") format("truetype");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Libre Franklin";
+    src: url("../fonts/LibreFranklin-Medium.ttf") format("truetype");
+    font-weight: 500;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Libre Franklin";
+    src: url("../fonts/LibreFranklin-SemiBold.ttf") format("truetype");
+    font-weight: 600;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Libre Franklin";
+    src: url("../fonts/LibreFranklin-Bold.ttf") format("truetype");
+    font-weight: 700;
+    font-display: swap;
+}
+
+/* ============================================================
+   Tokens de marca (Manual de Identidad Quantum Labs)
+   El "formato nocturno" (naranja sobre fondo oscuro) es la
+   combinacion principal de la marca -> tema oscuro por defecto.
+   ============================================================ */
+:root {
+    --acento: #E2724B;
+    --acento-tenue: rgba(226, 114, 75, 0.15);
+
+    /* Estados del semaforo: mismos valores ya usados en Cam_Lens_V2,
+       para consistencia visual entre herramientas internas de Quantum. */
+    --verde: #2FA36B;
+    --ambar: #E0902E;
+    --rojo: #D9534F;
+
+    /* Paleta categorica para series de graficas (no para semaforo).
+       Slots 1/3/4 de la paleta validada del dataviz skill: se salta
+       el slot 2 (naranja) a proposito porque colisiona con --acento. */
+    --serie-1: #3987e5; /* CPU (promedio) */
+    --serie-2: #199e70; /* GPU 0 */
+    --serie-3: #c98500; /* GPU 1 */
+
+    --fondo: #040918;
+    --superficie: #0D1326;
+    --superficie-2: #161D33;
+    --texto: #F5F6FA;
+    --texto-secundario: #A8AEC2;
+    --borde: #262E47;
+}
+
+:root[data-theme="claro"] {
+    --fondo: #F9F9F7;
+    --superficie: #FFFFFF;
+    --superficie-2: #F1EFEA;
+    --texto: #0B0B0B;
+    --texto-secundario: #52514E;
+    --borde: #E1E0D9;
+
+    --serie-1: #2a78d6;
+    --serie-2: #1baf7a;
+    --serie-3: #eda100;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: "Libre Franklin", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background-color: var(--fondo);
+    color: var(--texto);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* ============================================================
+   Header
+   ============================================================ */
+.encabezado {
+    display: flex;
+    align-items: center;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--borde);
+}
+
+.encabezado__marca {
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+.encabezado__logo {
+    height: 96px;
+    display: block;
+}
+
+.encabezado__titulo {
+    flex: 1;
+    text-align: center;
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--texto);
+}
+
+.encabezado__controles {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+}
+
+.selector {
+    background-color: var(--superficie);
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 14px;
+}
+
+.boton-tema {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+}
+
+.boton-tema img {
+    width: 22px;
+    height: 22px;
+}
+
+/* ============================================================
+   Layout general
+   ============================================================ */
+main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+h2 {
+    font-size: 15px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--texto-secundario);
+    margin: 0 0 12px 0;
+}
+
+.seccion__encabezado {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.seccion__encabezado h2 {
+    margin: 0;
+}
+
+section {
+    margin-bottom: 32px;
+}
+
+/* ============================================================
+   Tarjetas de estado actual
+   ============================================================ */
+.tarjetas {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.tarjeta {
+    background-color: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.tarjeta__titulo {
+    font-size: 13px;
+    color: var(--texto-secundario);
+    margin-bottom: 6px;
+}
+
+.tarjeta__valor {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.tarjeta__unidad {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--texto-secundario);
+}
+
+.punto-estado {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+.punto-estado[data-estado="verde"] { background-color: var(--verde); }
+.punto-estado[data-estado="ambar"] { background-color: var(--ambar); }
+.punto-estado[data-estado="rojo"]  { background-color: var(--rojo); }
+
+.tarjeta__sensor {
+    font-size: 12px;
+    color: var(--texto-secundario);
+    margin-top: 4px;
+}
+
+/* ============================================================
+   Detalle de todos los sensores (tabla colapsable)
+   ============================================================ */
+details {
+    margin-top: 12px;
+}
+summary {
+    cursor: pointer;
+    color: var(--acento);
+    font-size: 13px;
+    font-weight: 600;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 13px;
+}
+th, td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--borde);
+}
+th {
+    color: var(--texto-secundario);
+    font-weight: 600;
+}
+
+/* ============================================================
+   Historico / grafica
+   ============================================================ */
+.historico__controles {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.chip {
+    background-color: var(--superficie);
+    color: var(--texto-secundario);
+    border: 1px solid var(--borde);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+}
+.chip[aria-pressed="true"] {
+    background-color: var(--acento-tenue);
+    color: var(--acento);
+    border-color: var(--acento);
+    font-weight: 600;
+}
+
+.grafica-contenedor {
+    background-color: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.leyenda {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: var(--texto-secundario);
+    flex-wrap: wrap;
+}
+.leyenda__item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.leyenda__muestra {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.mensaje-vacio {
+    color: var(--texto-secundario);
+    font-size: 14px;
+    padding: 20px 0;
+    text-align: center;
+}
