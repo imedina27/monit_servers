@@ -140,7 +140,10 @@ body {
    ============================================================ */
 .contenedor-principal {
     display: flex;
-    align-items: flex-start;
+    /* align-items por defecto (stretch): ambas columnas se igualan a la altura
+       de la mas alta -- sin esto, forzar min-height al arbol a 100vh dejaba un
+       tramo vacio enorme debajo cuando el contenido principal es mas corto
+       que la pantalla (pantallas grandes). */
     /* Se topa y centra el CONJUNTO (contenido + arbol), no solo el contenido --
        si solo el contenido tuviera tope, en pantallas grandes quedaria un
        hueco vacio entre el y el arbol (ver historial). En pantallas chicas
@@ -165,7 +168,6 @@ main {
     flex-shrink: 0;
     padding: 20px 12px;
     border-left: 1px solid var(--borde);
-    min-height: calc(100vh - 65px);
     font-size: 14px;
 }
 
