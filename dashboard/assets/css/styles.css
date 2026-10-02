@@ -138,34 +138,45 @@ body {
 /* ============================================================
    Layout general
    ============================================================ */
+/* Por defecto (pantallas normales): 2 columnas, contenido + arbol,
+   topadas y centradas para no estirarse de mas. La columna reservada
+   (.reservado) se queda oculta -- no hay suficiente ancho para que
+   valga la pena. align-items por defecto (stretch) iguala las dos
+   columnas a la altura de la mas alta, sin forzar un alto fijo. */
 .contenedor-principal {
-    display: flex;
-    /* align-items por defecto (stretch): ambas columnas se igualan a la altura
-       de la mas alta -- sin esto, forzar min-height al arbol a 100vh dejaba un
-       tramo vacio enorme debajo cuando el contenido principal es mas corto
-       que la pantalla (pantallas grandes). */
-    /* Se topa y centra el CONJUNTO (contenido + arbol), no solo el contenido --
-       si solo el contenido tuviera tope, en pantallas grandes quedaria un
-       hueco vacio entre el y el arbol (ver historial). En pantallas chicas
-       no hace nada (nunca se llega al tope). */
+    display: grid;
+    grid-template-columns: 1fr clamp(220px, 25vw, 380px);
     max-width: 1700px;
     margin: 0 auto;
 }
 
+.reservado {
+    display: none;
+}
+
+/* Pantallas muy grandes (4K, ultrawide): 3 columnas 1/4 | 1/2 | 1/4 a todo
+   lo ancho -- la cuarta parte izquierda queda reservada para futuro. */
+@media (min-width: 1800px) {
+    .contenedor-principal {
+        grid-template-columns: 1fr 2fr 1fr;
+        max-width: none;
+    }
+    .reservado {
+        display: block;
+    }
+}
+
 main {
-    flex: 1;
     min-width: 0;
     padding: 24px;
 }
 
 /* ============================================================
-   Arbol de servidores (sidebar derecha)
+   Arbol de servidores (columna derecha)
    ============================================================ */
 .arbol {
-    /* Proporcional al ancho de pantalla (~1/4 a 1/3), acotado para no
-       verse diminuto en pantallas chicas ni enorme en monitores anchos. */
-    width: clamp(220px, 25vw, 380px);
-    flex-shrink: 0;
+    /* El ancho lo define la columna del grid (ver .contenedor-principal);
+       aqui solo el resto del estilo visual. */
     padding: 20px 12px;
     border-left: 1px solid var(--borde);
     font-size: 14px;
