@@ -24,7 +24,7 @@ En construcción. Ver [ROADMAP.md](ROADMAP.md) para el plan de trabajo paso a pa
 
 ### Colector Ubuntu (en cada servidor)
 
-#### Requisitos previos
+#### Requisitos previos (colector Ubuntu)
 
 ```bash
 # Python 3 (normalmente ya viene instalado)
@@ -115,7 +115,7 @@ En pausa — ver [ROADMAP.md](ROADMAP.md), paso 4.
 
 ### Backend + Dashboard (en la máquina central)
 
-#### Requisitos previos
+#### Requisitos previos (backend + dashboard)
 
 - Python 3.14 y `pipenv` instalados.
 - PostgreSQL ya instalado y accesible desde esta máquina.

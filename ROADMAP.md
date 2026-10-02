@@ -16,7 +16,7 @@
 5. **Modo de ejecución**: proceso persistente vía systemd (igual que hoy), con reinicio automático si falla.
 6. **Intervalo de monitoreo**: variable por servidor — cada servidor mantiene su propio `config.ini` local con `intervalo_minutos`, independiente del inventario central.
 
-### Implementado ✅
+### Implementado ✅ (colector Ubuntu)
 
 Colector actualizado en [`colector_ubuntu/`](colector_ubuntu/): `monitor.py`, `config.ini`, `monit_servers_v2.service`. Mismo motor de detección (lm-sensors/thermal_zones/nvidia-smi) que el proyecto viejo; cambia el guardado (formato largo, un archivo por lectura, timestamps en UTC) y la config (`directorio_salida` en vez de `ruta_csv`). El `.service` se renombró a `monit_servers_v2.service` (distinto al `monit_servers.service` del proyecto viejo) para no sobreescribir el servicio viejo si se copia a `/etc/systemd/system/` en el mismo servidor.
 
@@ -40,7 +40,7 @@ Colector actualizado en [`colector_ubuntu/`](colector_ubuntu/): `monitor.py`, `c
 - Lista central de los 15-20 servidores: hostname/IP, SO (Ubuntu/Windows), método de acceso (SSH, WinRM, API local, etc.) y credenciales.
 - Es la base que usará el modo "online" para saber a qué servidores conectarse.
 
-### Implementado ✅
+### Implementado ✅ (inventario)
 
 - [`inventario_servidores.yaml.example`](inventario_servidores.yaml.example): plantilla versionada en Git.
 - `inventario_servidores.yaml`: archivo real (gitignored) con los 2 servidores conocidos (DEVELOP, MINI_LENOVO), migrados del proyecto viejo.
@@ -79,7 +79,7 @@ Una sola función de importación hacia Postgres, con dos entradas (online vía 
 
 - Con 15-20 servidores, paralelizar la descarga en modo online (el script actual de Windows descarga secuencial).
 
-### Implementado ✅
+### Implementado ✅ (ingesta)
 
 Módulo en [`ingesta/`](ingesta/): `ingesta.py`, `config.ini` (sin secretos: `max_workers`, carpeta offline), y `.env.example` en la raíz (secretos de Postgres: `DB_HOST/PORT/NAME/USER/PASSWORD`).
 
@@ -105,7 +105,7 @@ Módulo en [`ingesta/`](ingesta/): `ingesta.py`, `config.ini` (sin secretos: `ma
 - La usan tanto el dashboard HTML como el widget de Rainmeter, evitando duplicar lógica de consulta en cada vista.
 - Calcula el estado del semáforo (verde/ámbar/rojo, ver paso 9) y lo entrega ya resuelto junto a la temperatura — ni el dashboard ni el widget evalúan umbrales por su cuenta.
 
-### Implementado y probado ✅
+### Implementado y probado ✅ (backend)
 
 Backend en [`backend/`](backend/): `main.py` (FastAPI), `umbrales.yaml` (umbrales del semáforo — **valores provisionales**, ver "Pendiente de decidir"), `config.ini` (host/puerto, por defecto `127.0.0.1:8000`, solo accesible desde esta máquina).
 
@@ -167,7 +167,7 @@ El histórico completo (hasta 7 meses) se amontonaba en una sola vista. Ahora la
 
 - Scripts de línea de comandos para respaldar/restaurar `monit_srv` completa, pensados para recuperarse de un formateo de la máquina central.
 
-### Implementado y probado ✅
+### Implementado y probado ✅ (respaldo/restauración)
 
 - [`db/respaldar.py`](db/respaldar.py): corre `pg_dump --clean --if-exists` (credenciales desde `.env`) y guarda en `bkp/Data_Base/{DB_NAME}_{ddmmaa}.sql` (carpeta gitignored). `--clean --if-exists` hace que el archivo incluya los `DROP` necesarios, para que restaurar deje la base exactamente como el respaldo, sin conflictos.
 - [`db/restaurar.py`](db/restaurar.py): acepta la ruta del archivo como argumento, o si no se da ninguno, lista los respaldos disponibles en `bkp/Data_Base/` para elegir uno interactivamente. Pide confirmación explícita (`escribe 'si'`) antes de sobreescribir — la restauración reemplaza todo el contenido de la base, a propósito. Si la base no existe (ej. máquina recién formateada), la crea antes de restaurar.
