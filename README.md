@@ -176,7 +176,34 @@ Abre `http://127.0.0.1:8000/` en el navegador — ahí mismo se sirve el dashboa
 
 ### Backend (servicio de Windows)
 
-El backend corre como servicio de Windows (`MonitServersV2_Backend`, instalado con [NSSM](https://nssm.cc/)) — arranca solo con la máquina, se reinicia solo si falla. Comandos útiles (requieren PowerShell como Administrador):
+El backend corre como servicio de Windows (`MonitServersV2_Backend`, instalado con [NSSM](https://nssm.cc/)) — arranca solo con la máquina, se reinicia solo si falla.
+
+#### Instalación (una sola vez, PowerShell como Administrador)
+
+1. Descarga [NSSM](https://nssm.cc/download) y copia `win64\nssm.exe` a `%LOCALAPPDATA%\Programs\nssm\nssm.exe`.
+2. Parado en la carpeta raíz del proyecto, corre:
+
+```powershell
+$nssm = "$env:LOCALAPPDATA\Programs\nssm\nssm.exe"
+$servicio = "MonitServersV2_Backend"
+$proyecto = (Get-Location).Path
+$venvDir = Get-ChildItem -Path "$env:USERPROFILE\.virtualenvs" -Directory -Filter "Monit_Servers_V2-*" | Select-Object -First 1
+$python = Join-Path $venvDir.FullName "Scripts\python.exe"
+
+& $nssm install $servicio $python
+& $nssm set $servicio AppParameters "-m uvicorn backend.main:app --host 127.0.0.1 --port 8000"
+& $nssm set $servicio AppDirectory $proyecto
+& $nssm set $servicio AppStdout "$proyecto\backend\service.log"
+& $nssm set $servicio AppStderr "$proyecto\backend\service.log"
+& $nssm set $servicio Start SERVICE_AUTO_START
+& $nssm set $servicio AppRestartDelay 5000
+& $nssm start $servicio
+& $nssm status $servicio
+```
+
+Debería terminar con `SERVICE_RUNNING`.
+
+#### Comandos útiles (PowerShell como Administrador)
 
 ```powershell
 Get-Service -Name "MonitServersV2_Backend"
@@ -187,17 +214,19 @@ Logs en `backend/service.log`.
 
 ### Ingesta
 
-Corre de dos formas:
+Corre de tres formas:
 
-1. **Automática al iniciar sesión** — tarea programada de Windows (`MonitServersV2_Ingesta`, disparador "al iniciar sesión"). Se crea así (PowerShell como Administrador):
+1. **Automática al iniciar sesión** — tarea programada de Windows (`MonitServersV2_Ingesta`, disparador "al iniciar sesión"). Para crearla (o recrearla si cambió algo), PowerShell como Administrador:
 
    ```powershell
-   $accion = New-ScheduledTaskAction -Execute "<ruta al python del venv>" -Argument "ingesta\ingesta.py" -WorkingDirectory "<ruta al proyecto>"
-   $disparador = New-ScheduledTaskTrigger -AtLogOn
-   Register-ScheduledTask -TaskName "MonitServersV2_Ingesta" -Action $accion -Trigger $disparador -User "$env:USERDOMAIN\$env:USERNAME"
+   powershell -ExecutionPolicy Bypass -File scripts\instalar_tarea_ingesta.ps1
    ```
 
+   El script ([`scripts/instalar_tarea_ingesta.ps1`](scripts/instalar_tarea_ingesta.ps1)) detecta solo la ruta del virtualenv — no hay que editar rutas a mano. Es seguro volver a correrlo: si la tarea ya existe, la reemplaza.
+
 2. **Bajo demanda** — botón "Actualizar" en el dashboard (llama a `POST /api/ingesta/ejecutar`, que corre la ingesta en el mismo proceso del backend y refresca la página al terminar).
+
+3. **Manual** (ver abajo), para cuando quieras correrla fuera de las otras dos.
 
 También se puede correr manualmente en cualquier momento:
 
@@ -265,6 +294,9 @@ Monit_Servers_V2/
 │   └── restaurar.py
 │
 ├── bkp/Data_Base/                         ← (gitignored) respaldos .sql generados por respaldar.py
+│
+├── scripts/
+│   └── instalar_tarea_ingesta.ps1         ← crea la tarea programada de la ingesta
 │
 ├── inventario_servidores.yaml.example     ← plantilla versionada
 ├── inventario_servidores.yaml             ← (gitignored) datos reales de los servidores
