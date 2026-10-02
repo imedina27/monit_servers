@@ -177,6 +177,15 @@ El histórico completo (hasta 7 meses) se amontonaba en una sola vista. Ahora la
 
 Se agregó [`db/migrar_historico_csv.py`](db/migrar_historico_csv.py) para convertir los CSV anchos del proyecto viejo (`cpu_*`/`gpu_*`) al formato largo e insertarlos en `lecturas`. Se usó para importar el histórico real de DEVELOP y MINI_LENOVO (marzo–octubre 2026, ~98,000 lecturas) — el dashboard ya tiene 7 meses de datos reales para probar agrupación por día/mes, no solo por hora.
 
+### Extra: despliegue persistente (servicio + tarea programada + botón) ✅
+
+El dashboard ya no depende de que haya una terminal abierta corriendo `uvicorn` a mano:
+
+- **Backend como servicio de Windows**: instalado con [NSSM](https://nssm.cc/) (`MonitServersV2_Backend`) — arranque automático, se reinicia solo si falla. NSSM **no fue bloqueado** por la política de Control de Aplicaciones de esta máquina (sí lo había sido `psycopg` v3 antes), así que funcionó sin rodeos.
+- **Ingesta al iniciar sesión**: tarea programada de Windows (`MonitServersV2_Ingesta`, disparador "al iniciar sesión"), corre una sola vez por sesión — decisión explícita del usuario de no tenerla recurrente, para no pegarle a los servidores sin necesidad.
+- **Botón "Actualizar" en el dashboard**: dispara la ingesta bajo demanda (`POST /api/ingesta/ejecutar`, corre `ingesta.main()` en el mismo proceso del backend) y refresca árbol + estado actual + histórico al terminar, sin perder la selección de servidor ni el zoom de la gráfica.
+- Instalar el servicio/tarea requiere PowerShell como Administrador (comandos documentados en el README) — no se puede hacer sin elevación.
+
 ## 9. Widget de Rainmeter
 
 - Mostrar temperatura por hora de 2-3 servidores seleccionados, consumiendo la API (plugin `WebParser`).

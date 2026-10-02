@@ -174,13 +174,38 @@ Abre `http://127.0.0.1:8000/` en el navegador — ahí mismo se sirve el dashboa
 
 ## Uso
 
-Por ahora la ingesta se corre manualmente desde la máquina central:
+### Backend (servicio de Windows)
+
+El backend corre como servicio de Windows (`MonitServersV2_Backend`, instalado con [NSSM](https://nssm.cc/)) — arranca solo con la máquina, se reinicia solo si falla. Comandos útiles (requieren PowerShell como Administrador):
+
+```powershell
+Get-Service -Name "MonitServersV2_Backend"
+Restart-Service -Name "MonitServersV2_Backend"   # despues de actualizar backend/*.py
+```
+
+Logs en `backend/service.log`.
+
+### Ingesta
+
+Corre de dos formas:
+
+1. **Automática al iniciar sesión** — tarea programada de Windows (`MonitServersV2_Ingesta`, disparador "al iniciar sesión"). Se crea así (PowerShell como Administrador):
+
+   ```powershell
+   $accion = New-ScheduledTaskAction -Execute "<ruta al python del venv>" -Argument "ingesta\ingesta.py" -WorkingDirectory "<ruta al proyecto>"
+   $disparador = New-ScheduledTaskTrigger -AtLogOn
+   Register-ScheduledTask -TaskName "MonitServersV2_Ingesta" -Action $accion -Trigger $disparador -User "$env:USERDOMAIN\$env:USERNAME"
+   ```
+
+2. **Bajo demanda** — botón "Actualizar" en el dashboard (llama a `POST /api/ingesta/ejecutar`, que corre la ingesta en el mismo proceso del backend y refresca la página al terminar).
+
+También se puede correr manualmente en cualquier momento:
 
 ```bash
 pipenv run python ingesta/ingesta.py
 ```
 
-Revisa `ingesta/ingesta.log` para ver qué se cargó. Automatizar esto con un scheduler (Task Scheduler de Windows) queda pendiente — por ahora los archivos simplemente se acumulan en cada servidor hasta la siguiente corrida manual.
+Revisa `ingesta/ingesta.log` para ver qué se cargó.
 
 ### Migrar datos históricos del proyecto viejo (CSV ancho → formato largo)
 
