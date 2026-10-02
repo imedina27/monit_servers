@@ -355,6 +355,12 @@ def main():
         f"{total_omitidos} ya estaban cargados, {offline_procesados} archivos offline cargados."
     )
 
+    return {
+        "online_cargados": total_procesados,
+        "online_omitidos": total_omitidos,
+        "offline_cargados": offline_procesados,
+    }
+
 
 if __name__ == "__main__":
     main()

@@ -104,6 +104,10 @@ function seleccionarServidor(nombre) {
     cargarHistorico();
 }
 
+// Pinta el arbol. Se llama tanto al cargar la pagina como al presionar
+// "Actualizar" -- NO reengancha el clic (eso se hace una sola vez, ver
+// initArbolClicks) y NO salta a reseleccionar el primer servidor si ya
+// habia uno elegido, solo lo remarca visualmente despues de repintar.
 async function cargarArbol() {
     const contenedor = document.getElementById("arbol-servidores");
     try {
@@ -116,24 +120,33 @@ async function cargarArbol() {
 
         contenedor.innerHTML = `<ul>${arbol.map(renderNodoArbol).join("")}</ul>`;
 
-        contenedor.addEventListener("click", (ev) => {
-            const etiqueta = ev.target.closest(".arbol-etiqueta");
-            if (etiqueta) {
-                etiqueta.parentElement.classList.toggle("colapsado");
-                return;
-            }
-            const servidor = ev.target.closest(".arbol-servidor");
-            if (servidor) {
-                seleccionarServidor(servidor.dataset.nombre);
-            }
-        });
-
-        const inicial = primerServidor(arbol);
-        if (inicial) seleccionarServidor(inicial);
+        if (estado.servidor) {
+            document.querySelector(`.arbol-servidor[data-nombre="${CSS.escape(estado.servidor)}"]`)?.classList.add("seleccionado");
+        } else {
+            const inicial = primerServidor(arbol);
+            if (inicial) seleccionarServidor(inicial);
+        }
     } catch (e) {
         contenedor.innerHTML = `<p class="mensaje-vacio">Error al cargar servidores.</p>`;
         console.error(e);
     }
+}
+
+// Delegacion de clic sobre el arbol -- se engancha UNA sola vez (el contenedor
+// nunca se reemplaza, solo su innerHTML en cargarArbol, asi que la delegacion
+// sigue funcionando sobre el contenido nuevo sin volver a engancharse).
+function initArbolClicks() {
+    document.getElementById("arbol-servidores").addEventListener("click", (ev) => {
+        const etiqueta = ev.target.closest(".arbol-etiqueta");
+        if (etiqueta) {
+            etiqueta.parentElement.classList.toggle("colapsado");
+            return;
+        }
+        const servidor = ev.target.closest(".arbol-servidor");
+        if (servidor) {
+            seleccionarServidor(servidor.dataset.nombre);
+        }
+    });
 }
 
 // ─── Estado actual (tarjetas + tabla) ──────────────────────────────────────
@@ -560,10 +573,44 @@ function initColumnaReservada() {
     mover();
 }
 
+// ─── Boton "Actualizar" (dispara la ingesta bajo demanda) ──────────────────
+function initBotonActualizar() {
+    const boton = document.getElementById("boton-actualizar");
+    const textoOriginal = boton.innerHTML;
+
+    boton.addEventListener("click", async () => {
+        boton.disabled = true;
+        boton.classList.add("cargando");
+        boton.innerHTML = `<span class="boton-actualizar__icono">↻</span> Actualizando...`;
+
+        try {
+            const resp = await fetch(`${API}/ingesta/ejecutar`, { method: "POST" });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const resultado = await resp.json();
+
+            await Promise.all([cargarArbol(), cargarActual(), refrescarHistorico()]);
+
+            const total = resultado.online_cargados + resultado.offline_cargados;
+            boton.innerHTML = `<span class="boton-actualizar__icono">✓</span> ${total} archivo(s) nuevos`;
+        } catch (e) {
+            console.error(e);
+            boton.innerHTML = `<span class="boton-actualizar__icono">✕</span> Error al actualizar`;
+        } finally {
+            boton.classList.remove("cargando");
+            setTimeout(() => {
+                boton.innerHTML = textoOriginal;
+                boton.disabled = false;
+            }, 3000);
+        }
+    });
+}
+
 // ─── Inicio ──────────────────────────────────────────────────────────────────
 initTema();
+initArbolClicks();
 cargarArbol();
 initDesplazador();
 initColumnaReservada();
+initBotonActualizar();
 document.getElementById("grafica").addEventListener("wheel", manejarZoomScroll, { passive: false });
 setInterval(() => { cargarActual(); refrescarHistorico(); }, 5 * 60 * 1000);

@@ -121,6 +121,42 @@ body {
     gap: 16px;
 }
 
+.boton-actualizar {
+    background-color: var(--superficie);
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.boton-actualizar:hover {
+    border-color: var(--acento);
+    color: var(--acento);
+}
+.boton-actualizar:disabled {
+    cursor: default;
+    opacity: 0.6;
+    border-color: var(--borde);
+    color: var(--texto);
+}
+.boton-actualizar__icono {
+    display: inline-block;
+    font-size: 15px;
+}
+.boton-actualizar.cargando .boton-actualizar__icono {
+    animation: girar 1s linear infinite;
+}
+@keyframes girar {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .boton-tema {
     background: none;
     border: none;

@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import yaml
@@ -12,6 +13,10 @@ BASE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = BASE_DIR.parent
 
 load_dotenv(PROJECT_DIR / ".env")
+
+# Para poder llamar a ingesta.main() directo (boton "Actualizar" del dashboard),
+# sin tener que lanzar un proceso aparte.
+sys.path.insert(0, str(PROJECT_DIR / "ingesta"))
 
 with open(BASE_DIR / "umbrales.yaml", encoding="utf-8") as f:
     UMBRALES = yaml.safe_load(f)
@@ -51,6 +56,21 @@ def obtener_servidor_id(cur, nombre):
 @app.get("/api/health")
 def salud():
     return {"status": "ok"}
+
+
+@app.post("/api/ingesta/ejecutar")
+def ejecutar_ingesta():
+    """
+    Dispara la ingesta bajo demanda (boton "Actualizar" del dashboard).
+    Corre en el mismo proceso del backend -- FastAPI ejecuta los endpoints
+    sincronos en un hilo aparte, asi que no bloquea otras peticiones.
+    """
+    import ingesta as modulo_ingesta
+
+    try:
+        return modulo_ingesta.main()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al ejecutar la ingesta: {e}")
 
 
 @app.get("/api/servidores")
