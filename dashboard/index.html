@@ -22,22 +22,26 @@
 </header>
 
 <div class="contenedor-principal">
-    <aside id="reservado" class="reservado" aria-hidden="true"></aside>
+    <aside id="reservado" class="reservado"></aside>
 
     <main>
         <section id="seccion-actual">
             <h2>Estado actual</h2>
             <div id="tarjetas" class="tarjetas"></div>
-            <details>
-                <summary>Ver todos los sensores</summary>
-                <table>
-                    <thead>
-                        <tr><th>Componente</th><th>Sensor</th><th>Temperatura</th><th>Estado</th><th>Medido en</th></tr>
-                    </thead>
-                    <tbody id="tabla-sensores"></tbody>
-                </table>
-            </details>
         </section>
+
+        <!-- En pantallas grandes, app.js mueve este bloque a #reservado (columna
+             izquierda) y lo deja siempre abierto; en pantallas normales se queda
+             aqui como desplegable colapsado. -->
+        <details id="bloque-sensores">
+            <summary>Ver todos los sensores</summary>
+            <table>
+                <thead>
+                    <tr><th>Componente</th><th>Sensor</th><th>Temperatura</th><th>Estado</th><th>Medido en</th></tr>
+                </thead>
+                <tbody id="tabla-sensores"></tbody>
+            </table>
+        </details>
 
         <section id="seccion-historico">
             <h2>Histórico</h2>

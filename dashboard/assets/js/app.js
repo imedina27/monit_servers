@@ -532,9 +532,38 @@ function activarTooltip(svg, series, periodosUnicos, x, y, margen, anchoUtil, ag
     svg.onmouseleave = () => { tooltip.style.display = "none"; };
 }
 
+// ─── Columna reservada (pantallas grandes): mueve "todos los sensores" ahi ──
+// En pantallas chicas/normales, #bloque-sensores vive colapsado dentro de
+// <main> (su posicion original en el HTML). En pantallas >=1800px, se mueve
+// a la columna reservada izquierda y se deja siempre abierto. Reacciona en
+// vivo si la ventana cruza el umbral (no solo al cargar la pagina).
+function initColumnaReservada() {
+    const bloque = document.getElementById("bloque-sensores");
+    const reservado = document.getElementById("reservado");
+    const hogarOriginal = document.getElementById("seccion-actual");
+    const resumen = bloque.querySelector("summary");
+    const mq = window.matchMedia("(min-width: 1800px)");
+
+    function mover() {
+        if (mq.matches) {
+            bloque.open = true;
+            resumen.textContent = "Todos los sensores";
+            reservado.appendChild(bloque);
+        } else {
+            bloque.open = false;
+            resumen.textContent = "Ver todos los sensores";
+            hogarOriginal.appendChild(bloque);
+        }
+    }
+
+    mq.addEventListener("change", mover);
+    mover();
+}
+
 // ─── Inicio ──────────────────────────────────────────────────────────────────
 initTema();
 cargarArbol();
 initDesplazador();
+initColumnaReservada();
 document.getElementById("grafica").addEventListener("wheel", manejarZoomScroll, { passive: false });
 setInterval(() => { cargarActual(); refrescarHistorico(); }, 5 * 60 * 1000);

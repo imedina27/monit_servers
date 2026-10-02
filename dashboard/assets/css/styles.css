@@ -154,21 +154,41 @@ body {
     display: none;
 }
 
-/* Pantallas muy grandes (4K, ultrawide): 3 columnas 1/4 | 1/2 | 1/4 a todo
-   lo ancho -- la cuarta parte izquierda queda reservada para futuro. */
+/* Pantallas muy grandes (4K, ultrawide): 3 columnas 2/6 | 3/6 | 1/6 a todo
+   lo ancho -- la columna izquierda (2/6) se usa para "todos los sensores"
+   (ver mas abajo, app.js mueve ahi #bloque-sensores). */
 @media (min-width: 1800px) {
     .contenedor-principal {
-        grid-template-columns: 1fr 2fr 1fr;
+        grid-template-columns: 2fr 3fr 1fr;
         max-width: none;
     }
     .reservado {
         display: block;
+        padding: 24px;
     }
 }
 
 main {
     min-width: 0;
     padding: 24px;
+}
+
+/* #bloque-sensores vive normalmente colapsado dentro de <main> (ver detalles
+   mas abajo); cuando app.js lo mueve a #reservado en pantallas grandes, se
+   fuerza abierto y el <summary> se ve como encabezado de seccion (h2), no
+   como un desplegable clickeable. */
+#reservado #bloque-sensores summary {
+    cursor: default;
+    list-style: none;
+    color: var(--texto-secundario);
+    font-size: 15px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 12px;
+}
+#reservado #bloque-sensores summary::-webkit-details-marker {
+    display: none;
 }
 
 /* ============================================================
