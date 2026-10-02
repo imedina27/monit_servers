@@ -154,12 +154,12 @@ body {
     display: none;
 }
 
-/* Pantallas muy grandes (4K, ultrawide): 3 columnas 2/6 | 3/6 | 1/6 a todo
-   lo ancho -- la columna izquierda (2/6) se usa para "todos los sensores"
+/* Pantallas muy grandes (4K, ultrawide): 3 columnas 3/12 | 7/12 | 2/12 a todo
+   lo ancho -- la columna izquierda (3/12) se usa para "todos los sensores"
    (ver mas abajo, app.js mueve ahi #bloque-sensores). */
 @media (min-width: 1800px) {
     .contenedor-principal {
-        grid-template-columns: 2fr 3fr 1fr;
+        grid-template-columns: 3fr 7fr 2fr;
         max-width: none;
     }
     .reservado {
