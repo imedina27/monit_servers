@@ -1,8 +1,27 @@
 const API = "/api";
 
+// ─── Configuracion del zoom de la grafica (ajustar aqui si hace falta) ─────
+const MS_HORA = 60 * 60 * 1000;
+const MS_DIA = 24 * MS_HORA;
+const MS_MES = 30 * MS_DIA; // aproximado, solo para acotar la ventana por defecto
+
+const CONFIG_ZOOM = {
+    // ventanaInicial: cuanto se ve al entrar o cambiar de agrupacion/servidor.
+    // minVentana: que tan cerca se puede hacer zoom in con la rueda del mouse.
+    // pasoScroll: cuanto cambia la ventana por cada "tick" de la rueda.
+    hora: { ventanaInicial: 2 * MS_DIA, minVentana: 12 * MS_HORA, pasoScroll: 6 * MS_HORA },
+    dia: { ventanaInicial: 7 * MS_DIA, minVentana: 2 * MS_DIA, pasoScroll: 1 * MS_DIA },
+    mes: { ventanaInicial: 4 * MS_MES, minVentana: 1 * MS_MES, pasoScroll: 1 * MS_MES },
+};
+
 const estado = {
     servidor: null,
     agrupacion: "hora",
+    filasHistorico: null,  // filas crudas de la API, para poder recolorear sin re-pedirlas (cambio de tema)
+    seriesCompletas: null, // series ya construidas, SIN recortar a la ventana visible
+    rangoDatos: null,      // {inicio, fin} en ms: todo el historico disponible para servidor+agrupacion actuales
+    ventanaMs: null,       // ancho de la ventana visible actual, en ms
+    finVentana: null,      // extremo derecho (mas reciente) de la ventana visible, en ms
 };
 
 // ─── Tema (claro/oscuro) ───────────────────────────────────────────────────
@@ -27,7 +46,11 @@ function initTema() {
         const nuevo = actual === "claro" ? "oscuro" : "claro";
         aplicarTema(nuevo);
         try { localStorage.setItem("tema", nuevo); } catch (e) { /* ignorar */ }
-        if (estado.servidor) cargarHistorico(); // recalcula colores de serie segun tema
+        // Recalcula colores de serie segun el tema nuevo, sin perder el zoom/desplazamiento actual.
+        if (estado.filasHistorico) {
+            estado.seriesCompletas = construirSeries(estado.filasHistorico);
+            actualizarVista();
+        }
     });
 }
 
@@ -181,30 +204,174 @@ document.addEventListener("DOMContentLoaded", () => {
 async function cargarHistorico() {
     if (!estado.servidor) return;
     const svg = document.getElementById("grafica");
-    const leyenda = document.getElementById("leyenda");
 
     try {
         const filas = await obtenerJSON(
             `${API}/servidores/${encodeURIComponent(estado.servidor)}/historico?agrupacion=${estado.agrupacion}`
         );
 
-        if (filas.length === 0) {
-            svg.innerHTML = "";
-            leyenda.innerHTML = "";
-            svg.insertAdjacentHTML("afterend", "");
-            document.querySelector(".grafica-contenedor").querySelector(".mensaje-vacio")?.remove();
-            document.querySelector(".grafica-contenedor").insertAdjacentHTML("beforeend", `<p class="mensaje-vacio">Sin histórico todavía para este servidor.</p>`);
-            return;
-        }
         document.querySelector(".grafica-contenedor .mensaje-vacio")?.remove();
 
-        const series = construirSeries(filas);
-        renderGrafica(svg, series, estado.agrupacion);
-        renderLeyenda(leyenda, series);
+        if (filas.length === 0) {
+            svg.innerHTML = "";
+            document.getElementById("leyenda").innerHTML = "";
+            document.getElementById("rango-actual").textContent = "";
+            document.getElementById("desplazador").style.display = "none";
+            document.querySelector(".grafica-contenedor").insertAdjacentHTML(
+                "beforeend", `<p class="mensaje-vacio">Sin histórico todavía para este servidor.</p>`
+            );
+            return;
+        }
+
+        estado.filasHistorico = filas;
+        estado.seriesCompletas = construirSeries(filas);
+
+        const todosMs = estado.seriesCompletas.flatMap(s => s.puntos.map(p => new Date(p.periodo).getTime()));
+        estado.rangoDatos = { inicio: Math.min(...todosMs), fin: Math.max(...todosMs) };
+
+        const config = CONFIG_ZOOM[estado.agrupacion];
+        const rangoTotal = estado.rangoDatos.fin - estado.rangoDatos.inicio;
+        estado.ventanaMs = rangoTotal > 0 ? Math.min(config.ventanaInicial, rangoTotal) : config.ventanaInicial;
+        estado.finVentana = estado.rangoDatos.fin;
+
+        actualizarVista();
     } catch (e) {
         svg.innerHTML = "";
         console.error(e);
     }
+}
+
+// Para el refresco automatico: vuelve a pedir el historico pero preserva el
+// zoom/desplazamiento del usuario (si estaba viendo el borde mas reciente, se
+// mueve con el; si se habia desplazado a un periodo viejo, se queda ahi).
+async function refrescarHistorico() {
+    if (!estado.servidor || !estado.rangoDatos) return;
+    try {
+        const filas = await obtenerJSON(
+            `${API}/servidores/${encodeURIComponent(estado.servidor)}/historico?agrupacion=${estado.agrupacion}`
+        );
+        if (filas.length === 0) return;
+
+        const seguiaElFinal = estado.finVentana === estado.rangoDatos.fin;
+
+        estado.filasHistorico = filas;
+        estado.seriesCompletas = construirSeries(filas);
+        const todosMs = estado.seriesCompletas.flatMap(s => s.puntos.map(p => new Date(p.periodo).getTime()));
+        estado.rangoDatos = { inicio: Math.min(...todosMs), fin: Math.max(...todosMs) };
+        estado.finVentana = Math.min(seguiaElFinal ? estado.rangoDatos.fin : estado.finVentana, estado.rangoDatos.fin);
+
+        actualizarVista();
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// Redibuja grafica + leyenda + rango + desplazador a partir del estado actual
+// de zoom/desplazamiento (estado.ventanaMs / estado.finVentana), sin volver a
+// pedirle nada al backend -- ya se tiene todo el historico en memoria.
+function actualizarVista() {
+    const inicioVentana = estado.finVentana - estado.ventanaMs;
+
+    const seriesRecortadas = estado.seriesCompletas.map(s => ({
+        ...s,
+        puntos: s.puntos.filter(p => {
+            const t = new Date(p.periodo).getTime();
+            return t >= inicioVentana && t <= estado.finVentana;
+        }),
+    }));
+
+    renderGrafica(document.getElementById("grafica"), seriesRecortadas, estado.agrupacion);
+    renderLeyenda(document.getElementById("leyenda"), estado.seriesCompletas);
+    renderRangoActual(inicioVentana, estado.finVentana);
+    renderDesplazador(inicioVentana);
+}
+
+function renderRangoActual(inicioMs, finMs) {
+    const fmt = (ms) => new Date(ms).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+    document.getElementById("rango-actual").textContent = `${fmt(inicioMs)} – ${fmt(finMs)}`;
+}
+
+function renderDesplazador(inicioVentana) {
+    const desplazador = document.getElementById("desplazador");
+    const miniatura = document.getElementById("desplazador-miniatura");
+    const { inicio, fin } = estado.rangoDatos;
+    const rangoTotal = fin - inicio;
+
+    if (rangoTotal <= 0 || estado.ventanaMs >= rangoTotal) {
+        desplazador.style.display = "none";
+        return;
+    }
+
+    const porcentajeAncho = Math.max(4, (estado.ventanaMs / rangoTotal) * 100);
+    const porcentajeInicio = ((inicioVentana - inicio) / rangoTotal) * 100;
+
+    desplazador.style.display = "block";
+    miniatura.style.width = `${porcentajeAncho}%`;
+    miniatura.style.left = `${Math.max(0, Math.min(100 - porcentajeAncho, porcentajeInicio))}%`;
+}
+
+// ─── Zoom con scroll (rueda arriba = acercar, abajo = alejar) ──────────────
+function manejarZoomScroll(ev) {
+    if (!estado.rangoDatos) return;
+    ev.preventDefault();
+
+    const config = CONFIG_ZOOM[estado.agrupacion];
+    const rangoTotal = estado.rangoDatos.fin - estado.rangoDatos.inicio;
+    const direccion = ev.deltaY < 0 ? -1 : 1;
+
+    const nuevaVentana = Math.max(config.minVentana, Math.min(rangoTotal, estado.ventanaMs + direccion * config.pasoScroll));
+    estado.ventanaMs = nuevaVentana;
+
+    if (estado.finVentana - estado.ventanaMs < estado.rangoDatos.inicio) {
+        estado.finVentana = estado.rangoDatos.inicio + estado.ventanaMs;
+    }
+    if (estado.finVentana > estado.rangoDatos.fin) {
+        estado.finVentana = estado.rangoDatos.fin;
+    }
+
+    actualizarVista();
+}
+
+// ─── Desplazador horizontal (arrastrar para ver periodos anteriores) ──────
+function initDesplazador() {
+    const desplazador = document.getElementById("desplazador");
+    const miniatura = document.getElementById("desplazador-miniatura");
+    let arrastrando = false;
+    let inicioArrastreX = 0;
+    let inicioVentanaAlArrastrar = 0;
+
+    const mover = (clientX) => {
+        const rangoTotal = estado.rangoDatos.fin - estado.rangoDatos.inicio;
+        const deltaMs = ((clientX - inicioArrastreX) / desplazador.clientWidth) * rangoTotal;
+        let nuevoInicio = inicioVentanaAlArrastrar + deltaMs;
+        nuevoInicio = Math.max(estado.rangoDatos.inicio, Math.min(estado.rangoDatos.fin - estado.ventanaMs, nuevoInicio));
+        estado.finVentana = nuevoInicio + estado.ventanaMs;
+        actualizarVista();
+    };
+
+    miniatura.addEventListener("pointerdown", (ev) => {
+        arrastrando = true;
+        miniatura.classList.add("arrastrando");
+        inicioArrastreX = ev.clientX;
+        inicioVentanaAlArrastrar = estado.finVentana - estado.ventanaMs;
+        miniatura.setPointerCapture(ev.pointerId);
+    });
+    miniatura.addEventListener("pointermove", (ev) => { if (arrastrando) mover(ev.clientX); });
+    const terminarArrastre = () => { arrastrando = false; miniatura.classList.remove("arrastrando"); };
+    miniatura.addEventListener("pointerup", terminarArrastre);
+    miniatura.addEventListener("pointercancel", terminarArrastre);
+
+    // Clic en la pista (fuera de la miniatura): salta la ventana a ese punto.
+    desplazador.addEventListener("click", (ev) => {
+        if (ev.target === miniatura || !estado.rangoDatos) return;
+        const rect = desplazador.getBoundingClientRect();
+        const fraccion = (ev.clientX - rect.left) / rect.width;
+        const rangoTotal = estado.rangoDatos.fin - estado.rangoDatos.inicio;
+        let nuevoInicio = estado.rangoDatos.inicio + fraccion * rangoTotal - estado.ventanaMs / 2;
+        nuevoInicio = Math.max(estado.rangoDatos.inicio, Math.min(estado.rangoDatos.fin - estado.ventanaMs, nuevoInicio));
+        estado.finVentana = nuevoInicio + estado.ventanaMs;
+        actualizarVista();
+    });
 }
 
 // CPU: promedio de todos los sensores cpu por periodo (una sola linea).
@@ -368,4 +535,6 @@ function activarTooltip(svg, series, periodosUnicos, x, y, margen, anchoUtil, ag
 // ─── Inicio ──────────────────────────────────────────────────────────────────
 initTema();
 cargarArbol();
-setInterval(() => { cargarActual(); cargarHistorico(); }, 5 * 60 * 1000);
+initDesplazador();
+document.getElementById("grafica").addEventListener("wheel", manejarZoomScroll, { passive: false });
+setInterval(() => { cargarActual(); refrescarHistorico(); }, 5 * 60 * 1000);

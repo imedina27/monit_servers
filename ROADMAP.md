@@ -144,8 +144,24 @@ El combo plano de servidores se iba a volver inmanejable con 15-20+ servidores d
 - **Configuración**: campo `grupo` en `inventario_servidores.yaml`, como ruta tipo carpeta (`Quantum` o `AbInBev/Zacatecas`) — la ingesta crea los niveles que falten automáticamente, nada se da de alta a mano en la BD.
 - **`ingesta.py`**: ahora sincroniza metadatos (servidor + grupo) de **todos** los servidores del inventario en cada corrida, no solo los activos — así un servidor `activo: false` (de alta futura, sin credenciales reales todavía) igual aparece en el árbol, aunque no se le descargue nada.
 - **Backend**: `GET /api/grupos` arma el árbol completo (grupos anidados + servidores como hojas) en una sola llamada.
-- **Dashboard**: el combo se quitó por completo; la barra lateral izquierda dibuja el árbol (expandido por defecto), con clic para expandir/colapsar grupos y para seleccionar un servidor.
+- **Dashboard**: el combo se quitó por completo; una barra lateral dibuja el árbol (expandido por defecto), con clic para expandir/colapsar grupos y para seleccionar un servidor.
 - Se agregaron servidores ilustrativos (`AbInBev/Zacatecas/Apan/Medellin`, `activo: false`, IPs falsas) al inventario real para poder ver el árbol con varios niveles — reemplazar por servidores reales cuando existan.
+
+**Ajustes pedidos tras la primera revisión:**
+
+- Árbol movido al lado **derecho** de la pantalla (no izquierdo).
+- **Orden real del YAML, no alfabético**: se agregó columna `orden` a `grupos` y `servidores`; `ingesta.py` la recalcula en cada corrida a partir de la posición de cada servidor en el inventario (un grupo repetido conserva el orden de su primera aparición). Backend y dashboard ordenan por esa columna.
+
+### Extra: zoom y desplazamiento en la gráfica histórica ✅
+
+El histórico completo (hasta 7 meses) se amontonaba en una sola vista. Ahora la gráfica muestra una ventana acotada por defecto, con zoom (rueda del mouse) y desplazamiento (barra bajo la gráfica):
+
+- **Ventana por defecto, anclada al dato más reciente disponible** (no al reloj — así no se ve "vacía" si el colector no ha mandado nada recientemente): 48h en "por hora", 7 días en "por día", 4 meses en "por mes".
+- **Zoom con scroll**: rueda hacia arriba = acerca (ventana más chica); hacia abajo = aleja (ventana más grande), hasta el límite de datos disponibles. El extremo derecho de la ventana se queda fijo al hacer zoom (no salta a "ahora").
+- **Barra de desplazamiento** bajo la gráfica (arrastrar, o clic para saltar) para navegar a periodos anteriores una vez hecho zoom. Se oculta sola cuando la ventana ya muestra todo el histórico disponible.
+- **Límites de zoom configurables**: bloque `CONFIG_ZOOM` al inicio de `dashboard/assets/js/app.js` (ventana por defecto, mínimo de zoom-in, tamaño del paso por "tick" de scroll, por cada agrupación).
+- Todo es client-side: el historico completo se trae una sola vez del backend; el zoom/desplazamiento solo recorta y reescala en el navegador, sin pegarle de nuevo a la API.
+- El refresco automático (cada 5 min) y el cambio de tema ya no resetean el zoom/desplazamiento del usuario.
 
 ## 8. Respaldo y restauración de la base de datos
 

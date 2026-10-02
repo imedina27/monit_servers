@@ -22,10 +22,6 @@
 </header>
 
 <div class="contenedor-principal">
-    <aside id="arbol-servidores" class="arbol" aria-label="Servidores">
-        <p class="mensaje-vacio">Cargando servidores...</p>
-    </aside>
-
     <main>
         <section id="seccion-actual">
             <h2>Estado actual</h2>
@@ -49,11 +45,21 @@
                 <button class="chip" data-agrupacion="mes" aria-pressed="false">Por mes</button>
             </div>
             <div class="grafica-contenedor">
-                <div id="leyenda" class="leyenda"></div>
+                <div class="grafica-contenedor__barra">
+                    <div id="leyenda" class="leyenda"></div>
+                    <div id="rango-actual" class="rango-actual"></div>
+                </div>
                 <svg id="grafica" width="100%" height="320" role="img" aria-label="Gráfica de temperatura en el tiempo"></svg>
+                <div class="desplazador" id="desplazador" title="Arrastra para ver periodos anteriores">
+                    <div class="desplazador__miniatura" id="desplazador-miniatura"></div>
+                </div>
             </div>
         </section>
     </main>
+
+    <aside id="arbol-servidores" class="arbol" aria-label="Servidores">
+        <p class="mensaje-vacio">Cargando servidores...</p>
+    </aside>
 </div>
 
 <script src="assets/js/app.js"></script>

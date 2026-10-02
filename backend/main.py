@@ -56,7 +56,7 @@ def salud():
 @app.get("/api/servidores")
 def listar_servidores():
     with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT id, nombre, sistema_operativo, activo FROM servidores ORDER BY nombre")
+        cur.execute("SELECT id, nombre, sistema_operativo, activo FROM servidores ORDER BY orden")
         return cur.fetchall()
 
 
@@ -69,11 +69,11 @@ def listar_arbol():
     aparte para no perderlos de vista.
     """
     with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT id, nombre, grupo_padre_id FROM grupos ORDER BY nombre")
+        cur.execute("SELECT id, nombre, grupo_padre_id FROM grupos ORDER BY orden")
         grupos = cur.fetchall()
-        cur.execute("SELECT nombre, grupo_id, activo FROM servidores WHERE grupo_id IS NOT NULL ORDER BY nombre")
+        cur.execute("SELECT nombre, grupo_id, activo FROM servidores WHERE grupo_id IS NOT NULL ORDER BY orden")
         servidores = cur.fetchall()
-        cur.execute("SELECT nombre, activo FROM servidores WHERE grupo_id IS NULL ORDER BY nombre")
+        cur.execute("SELECT nombre, activo FROM servidores WHERE grupo_id IS NULL ORDER BY orden")
         sin_grupo = cur.fetchall()
 
     nodos = {g["id"]: {"tipo": "grupo", "nombre": g["nombre"], "hijos": []} for g in grupos}

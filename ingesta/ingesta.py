@@ -262,12 +262,64 @@ def sincronizar_todo(inventario):
     Da de alta/actualiza TODOS los servidores del inventario y sus grupos
     (activos o no), para que el arbol del dashboard los vea aunque todavia
     no se les este descargando informacion (ej. servidores de alta futura).
+
+    Tambien recalcula 'orden' (grupos y servidores) a partir de la posicion
+    en el YAML -- el arbol del dashboard respeta ese orden, no alfabetiza.
+    Un grupo repetido (ej. "AbInBev" referenciado por varios servidores)
+    conserva el orden de su primera aparicion dentro de esta misma corrida.
     """
     conn = conectar_db()
     try:
-        for nombre, servidor in inventario.items():
-            grupo_id = obtener_grupo_id(conn, servidor.get("grupo"))
-            obtener_servidor_id(conn, nombre, servidor["sistema_operativo"], servidor.get("activo", True), grupo_id)
+        contador_por_padre = {}    # grupo_padre_id -> siguiente 'orden' libre
+        orden_ya_asignado = {}     # (grupo_padre_id, nombre) -> orden en esta corrida
+
+        for indice_servidor, (nombre, servidor) in enumerate(inventario.items()):
+            grupo_id = None
+            grupo_padre_id = None
+            ruta_grupo = servidor.get("grupo")
+
+            if ruta_grupo:
+                with conn.cursor() as cur:
+                    for nombre_grupo in (p.strip() for p in ruta_grupo.split("/") if p.strip()):
+                        clave = (grupo_padre_id, nombre_grupo)
+                        if clave in orden_ya_asignado:
+                            orden_grupo = orden_ya_asignado[clave]
+                        else:
+                            orden_grupo = contador_por_padre.get(grupo_padre_id, 0)
+                            contador_por_padre[grupo_padre_id] = orden_grupo + 1
+                            orden_ya_asignado[clave] = orden_grupo
+
+                        cur.execute(
+                            "SELECT id FROM grupos WHERE nombre = %s AND grupo_padre_id IS NOT DISTINCT FROM %s",
+                            (nombre_grupo, grupo_padre_id),
+                        )
+                        fila = cur.fetchone()
+                        if fila:
+                            grupo_id = fila[0]
+                            cur.execute("UPDATE grupos SET orden = %s WHERE id = %s", (orden_grupo, grupo_id))
+                        else:
+                            cur.execute(
+                                "INSERT INTO grupos (nombre, grupo_padre_id, orden) VALUES (%s, %s, %s) RETURNING id",
+                                (nombre_grupo, grupo_padre_id, orden_grupo),
+                            )
+                            grupo_id = cur.fetchone()[0]
+                        grupo_padre_id = grupo_id
+                conn.commit()
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO servidores (nombre, sistema_operativo, activo, grupo_id, orden)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (nombre) DO UPDATE
+                        SET sistema_operativo = EXCLUDED.sistema_operativo,
+                            activo = EXCLUDED.activo,
+                            grupo_id = EXCLUDED.grupo_id,
+                            orden = EXCLUDED.orden
+                    """,
+                    (nombre, servidor["sistema_operativo"], servidor.get("activo", True), grupo_id, indice_servidor),
+                )
+            conn.commit()
     finally:
         conn.close()
 
