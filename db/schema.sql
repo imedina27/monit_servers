@@ -2,11 +2,22 @@
 -- Todas las fechas se guardan en UTC (TIMESTAMPTZ); la conversion a hora local
 -- se hace en la capa de consulta/dashboard, no aqui.
 
+-- Arbol de agrupacion para el sidebar del dashboard (cliente -> ubicacion -> ...).
+-- Profundidad libre: un servidor puede colgar de cualquier nivel (ver 'grupo'
+-- en inventario_servidores.yaml, ej. "Quantum" o "AbInBev/Zacatecas").
+CREATE TABLE grupos (
+    id              SERIAL PRIMARY KEY,
+    nombre          VARCHAR(100) NOT NULL,
+    grupo_padre_id  INTEGER REFERENCES grupos(id),
+    UNIQUE (nombre, grupo_padre_id)
+);
+
 CREATE TABLE servidores (
     id                SERIAL PRIMARY KEY,
     nombre            VARCHAR(50) NOT NULL UNIQUE,
     sistema_operativo VARCHAR(10) NOT NULL CHECK (sistema_operativo IN ('ubuntu', 'windows')),
     activo            BOOLEAN NOT NULL DEFAULT true,
+    grupo_id          INTEGER REFERENCES grupos(id),
     creado_en         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

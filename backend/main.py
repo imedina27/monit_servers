@@ -60,6 +60,44 @@ def listar_servidores():
         return cur.fetchall()
 
 
+@app.get("/api/grupos")
+def listar_arbol():
+    """
+    Arbol de grupos (cliente -> ubicacion -> ... , profundidad libre) con los
+    servidores como hojas, para el sidebar del dashboard. El grupo_padre_id
+    de cada grupo arma la jerarquia; los servidores sin grupo_id se agrupan
+    aparte para no perderlos de vista.
+    """
+    with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT id, nombre, grupo_padre_id FROM grupos ORDER BY nombre")
+        grupos = cur.fetchall()
+        cur.execute("SELECT nombre, grupo_id, activo FROM servidores WHERE grupo_id IS NOT NULL ORDER BY nombre")
+        servidores = cur.fetchall()
+        cur.execute("SELECT nombre, activo FROM servidores WHERE grupo_id IS NULL ORDER BY nombre")
+        sin_grupo = cur.fetchall()
+
+    nodos = {g["id"]: {"tipo": "grupo", "nombre": g["nombre"], "hijos": []} for g in grupos}
+    raiz = []
+    for g in grupos:
+        nodo = nodos[g["id"]]
+        if g["grupo_padre_id"] is None:
+            raiz.append(nodo)
+        else:
+            nodos[g["grupo_padre_id"]]["hijos"].append(nodo)
+
+    for s in servidores:
+        nodos[s["grupo_id"]]["hijos"].append({"tipo": "servidor", "nombre": s["nombre"], "activo": s["activo"]})
+
+    if sin_grupo:
+        raiz.append({
+            "tipo": "grupo",
+            "nombre": "Sin grupo",
+            "hijos": [{"tipo": "servidor", "nombre": s["nombre"], "activo": s["activo"]} for s in sin_grupo],
+        })
+
+    return raiz
+
+
 @app.get("/api/servidores/{nombre}/actual")
 def temperatura_actual(nombre: str):
     with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:

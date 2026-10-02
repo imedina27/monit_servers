@@ -49,31 +49,66 @@ async function obtenerJSON(url) {
     return resp.json();
 }
 
-// ─── Servidores ─────────────────────────────────────────────────────────────
-async function cargarServidores() {
-    const selector = document.getElementById("selector-servidor");
-    try {
-        const servidores = await obtenerJSON(`${API}/servidores`);
-        const activos = servidores.filter(s => s.activo);
+// ─── Arbol de servidores (sidebar) ──────────────────────────────────────────
+function renderNodoArbol(nodo) {
+    if (nodo.tipo === "servidor") {
+        return `<li class="arbol-servidor" data-nombre="${nodo.nombre}" data-activo="${nodo.activo}">${nodo.nombre}</li>`;
+    }
+    const hijosHtml = nodo.hijos.map(renderNodoArbol).join("");
+    return `
+        <li class="arbol-grupo">
+            <div class="arbol-etiqueta">${nodo.nombre}</div>
+            <ul>${hijosHtml}</ul>
+        </li>
+    `;
+}
 
-        if (activos.length === 0) {
-            selector.innerHTML = `<option value="">Sin servidores activos</option>`;
+// Primer servidor que encuentre, recorriendo el arbol a profundidad (para la seleccion inicial).
+function primerServidor(nodos) {
+    for (const nodo of nodos) {
+        if (nodo.tipo === "servidor") return nodo.nombre;
+        const encontrado = primerServidor(nodo.hijos);
+        if (encontrado) return encontrado;
+    }
+    return null;
+}
+
+function seleccionarServidor(nombre) {
+    estado.servidor = nombre;
+    document.querySelectorAll(".arbol-servidor.seleccionado").forEach(el => el.classList.remove("seleccionado"));
+    document.querySelector(`.arbol-servidor[data-nombre="${CSS.escape(nombre)}"]`)?.classList.add("seleccionado");
+    cargarActual();
+    cargarHistorico();
+}
+
+async function cargarArbol() {
+    const contenedor = document.getElementById("arbol-servidores");
+    try {
+        const arbol = await obtenerJSON(`${API}/grupos`);
+
+        if (arbol.length === 0) {
+            contenedor.innerHTML = `<p class="mensaje-vacio">Sin servidores todavía.</p>`;
             return;
         }
 
-        selector.innerHTML = activos.map(s => `<option value="${s.nombre}">${s.nombre}</option>`).join("");
-        estado.servidor = activos[0].nombre;
+        contenedor.innerHTML = `<ul>${arbol.map(renderNodoArbol).join("")}</ul>`;
 
-        selector.addEventListener("change", () => {
-            estado.servidor = selector.value;
-            cargarActual();
-            cargarHistorico();
+        contenedor.addEventListener("click", (ev) => {
+            const etiqueta = ev.target.closest(".arbol-etiqueta");
+            if (etiqueta) {
+                etiqueta.parentElement.classList.toggle("colapsado");
+                return;
+            }
+            const servidor = ev.target.closest(".arbol-servidor");
+            if (servidor) {
+                seleccionarServidor(servidor.dataset.nombre);
+            }
         });
 
-        cargarActual();
-        cargarHistorico();
+        const inicial = primerServidor(arbol);
+        if (inicial) seleccionarServidor(inicial);
     } catch (e) {
-        selector.innerHTML = `<option value="">Error al cargar servidores</option>`;
+        contenedor.innerHTML = `<p class="mensaje-vacio">Error al cargar servidores.</p>`;
         console.error(e);
     }
 }
@@ -332,5 +367,5 @@ function activarTooltip(svg, series, periodosUnicos, x, y, margen, anchoUtil, ag
 
 // ─── Inicio ──────────────────────────────────────────────────────────────────
 initTema();
-cargarServidores();
+cargarArbol();
 setInterval(() => { cargarActual(); cargarHistorico(); }, 5 * 60 * 1000);

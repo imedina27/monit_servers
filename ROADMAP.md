@@ -136,6 +136,17 @@ Dashboard en [`dashboard/`](dashboard/), servido por el backend (`app.mount("/",
 - **Ajustes pedidos por el usuario tras la primera revisión**: logo del header 3x más grande, título centrado "Server Temperature Monitor", selector de servidor movido de la barra superior al encabezado de la sección "Estado actual".
 - Instrucciones de instalación del backend + dashboard agregadas al [README.md](README.md) (crear `.env`, aplicar `db/schema.sql`, configurar inventario, levantar `uvicorn`).
 
+### Extra: árbol de servidores por cliente/ubicación ✅
+
+El combo plano de servidores se iba a volver inmanejable con 15-20+ servidores de varios clientes. Se reemplazó por una barra lateral con árbol expandible/colapsable:
+
+- **Esquema**: tabla `grupos` auto-referenciada (`grupo_padre_id`), profundidad libre; `servidores.grupo_id` apunta a la hoja del árbol de la que cuelga cada servidor.
+- **Configuración**: campo `grupo` en `inventario_servidores.yaml`, como ruta tipo carpeta (`Quantum` o `AbInBev/Zacatecas`) — la ingesta crea los niveles que falten automáticamente, nada se da de alta a mano en la BD.
+- **`ingesta.py`**: ahora sincroniza metadatos (servidor + grupo) de **todos** los servidores del inventario en cada corrida, no solo los activos — así un servidor `activo: false` (de alta futura, sin credenciales reales todavía) igual aparece en el árbol, aunque no se le descargue nada.
+- **Backend**: `GET /api/grupos` arma el árbol completo (grupos anidados + servidores como hojas) en una sola llamada.
+- **Dashboard**: el combo se quitó por completo; la barra lateral izquierda dibuja el árbol (expandido por defecto), con clic para expandir/colapsar grupos y para seleccionar un servidor.
+- Se agregaron servidores ilustrativos (`AbInBev/Zacatecas/Apan/Medellin`, `activo: false`, IPs falsas) al inventario real para poder ver el árbol con varios niveles — reemplazar por servidores reales cuando existan.
+
 ## 8. Respaldo y restauración de la base de datos
 
 - Scripts de línea de comandos para respaldar/restaurar `monit_srv` completa, pensados para recuperarse de un formateo de la máquina central.

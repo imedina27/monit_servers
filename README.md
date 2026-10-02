@@ -156,7 +156,7 @@ psql -h localhost -U tu_usuario -d monit_srv -f db/schema.sql
 copy inventario_servidores.yaml.example inventario_servidores.yaml
 ```
 
-Completa ahí los servidores reales (ver paso 5 de la instalación del colector Ubuntu, arriba).
+Completa ahí los servidores reales (ver paso 5 de la instalación del colector Ubuntu, arriba). El campo `grupo` (ej. `Quantum` o `AbInBev/Zacatecas`) define dónde aparece cada servidor en el árbol del dashboard — la ingesta crea los niveles que falten automáticamente.
 
 #### Paso 5 — (Opcional) Ajustar los umbrales del semáforo
 

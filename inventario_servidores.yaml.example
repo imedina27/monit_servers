@@ -4,6 +4,11 @@
 
 servidores:
   - nombre: servidor_01
+    # Define el arbol del dashboard: un nombre simple (ej. "Quantum") cuelga
+    # el servidor directo de ese grupo; una ruta tipo carpeta (ej.
+    # "Cliente/Ciudad") crea los niveles intermedios que hagan falta,
+    # automaticamente, la proxima vez que corra la ingesta.
+    grupo: Quantum
     sistema_operativo: ubuntu       # ubuntu | windows
     activo: true
     ip: 192.168.192.XXX
@@ -15,6 +20,7 @@ servidores:
 
   # Agrega mas servidores copiando el bloque de arriba
   # - nombre: servidor_02
+  #   grupo: Cliente/Ciudad
   #   sistema_operativo: ubuntu
   #   activo: true
   #   ip: 192.168.192.YYY

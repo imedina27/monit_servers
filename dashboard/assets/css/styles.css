@@ -121,16 +121,6 @@ body {
     gap: 16px;
 }
 
-.selector {
-    background-color: var(--superficie);
-    color: var(--texto);
-    border: 1px solid var(--borde);
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-family: inherit;
-    font-size: 14px;
-}
-
 .boton-tema {
     background: none;
     border: none;
@@ -148,10 +138,82 @@ body {
 /* ============================================================
    Layout general
    ============================================================ */
+.contenedor-principal {
+    display: flex;
+    align-items: flex-start;
+}
+
 main {
+    flex: 1;
+    min-width: 0;
     max-width: 1100px;
-    margin: 0 auto;
     padding: 24px;
+}
+
+/* ============================================================
+   Arbol de servidores (sidebar izquierda)
+   ============================================================ */
+.arbol {
+    width: 240px;
+    flex-shrink: 0;
+    padding: 20px 12px;
+    border-right: 1px solid var(--borde);
+    min-height: calc(100vh - 65px);
+    font-size: 14px;
+}
+
+.arbol ul {
+    list-style: none;
+    margin: 0;
+    padding-left: 14px;
+}
+.arbol > ul {
+    padding-left: 0;
+}
+
+.arbol-etiqueta {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 5px 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+}
+.arbol-etiqueta:hover {
+    background-color: var(--superficie-2);
+}
+.arbol-etiqueta::before {
+    content: "▾";
+    font-size: 10px;
+    color: var(--texto-secundario);
+    width: 10px;
+}
+.arbol-grupo.colapsado > .arbol-etiqueta::before {
+    content: "▸";
+}
+.arbol-grupo.colapsado > ul {
+    display: none;
+}
+
+.arbol-servidor {
+    cursor: pointer;
+    padding: 5px 6px 5px 20px;
+    border-radius: 4px;
+    color: var(--texto-secundario);
+}
+.arbol-servidor:hover {
+    background-color: var(--superficie-2);
+    color: var(--texto);
+}
+.arbol-servidor.seleccionado {
+    background-color: var(--acento-tenue);
+    color: var(--acento);
+    font-weight: 600;
+}
+.arbol-servidor[data-activo="false"] {
+    opacity: 0.55;
 }
 
 h2 {
@@ -161,16 +223,6 @@ h2 {
     letter-spacing: 0.04em;
     color: var(--texto-secundario);
     margin: 0 0 12px 0;
-}
-
-.seccion__encabezado {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-}
-.seccion__encabezado h2 {
-    margin: 0;
 }
 
 section {

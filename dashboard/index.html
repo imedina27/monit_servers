@@ -21,39 +21,40 @@
     </div>
 </header>
 
-<main>
-    <section id="seccion-actual">
-        <div class="seccion__encabezado">
-            <h2>Estado actual</h2>
-            <select id="selector-servidor" class="selector">
-                <option value="">Cargando servidores...</option>
-            </select>
-        </div>
-        <div id="tarjetas" class="tarjetas"></div>
-        <details>
-            <summary>Ver todos los sensores</summary>
-            <table>
-                <thead>
-                    <tr><th>Componente</th><th>Sensor</th><th>Temperatura</th><th>Estado</th><th>Medido en</th></tr>
-                </thead>
-                <tbody id="tabla-sensores"></tbody>
-            </table>
-        </details>
-    </section>
+<div class="contenedor-principal">
+    <aside id="arbol-servidores" class="arbol" aria-label="Servidores">
+        <p class="mensaje-vacio">Cargando servidores...</p>
+    </aside>
 
-    <section id="seccion-historico">
-        <h2>Histórico</h2>
-        <div class="historico__controles" id="chips-agrupacion">
-            <button class="chip" data-agrupacion="hora" aria-pressed="true">Por hora</button>
-            <button class="chip" data-agrupacion="dia" aria-pressed="false">Por día</button>
-            <button class="chip" data-agrupacion="mes" aria-pressed="false">Por mes</button>
-        </div>
-        <div class="grafica-contenedor">
-            <div id="leyenda" class="leyenda"></div>
-            <svg id="grafica" width="100%" height="320" role="img" aria-label="Gráfica de temperatura en el tiempo"></svg>
-        </div>
-    </section>
-</main>
+    <main>
+        <section id="seccion-actual">
+            <h2>Estado actual</h2>
+            <div id="tarjetas" class="tarjetas"></div>
+            <details>
+                <summary>Ver todos los sensores</summary>
+                <table>
+                    <thead>
+                        <tr><th>Componente</th><th>Sensor</th><th>Temperatura</th><th>Estado</th><th>Medido en</th></tr>
+                    </thead>
+                    <tbody id="tabla-sensores"></tbody>
+                </table>
+            </details>
+        </section>
+
+        <section id="seccion-historico">
+            <h2>Histórico</h2>
+            <div class="historico__controles" id="chips-agrupacion">
+                <button class="chip" data-agrupacion="hora" aria-pressed="true">Por hora</button>
+                <button class="chip" data-agrupacion="dia" aria-pressed="false">Por día</button>
+                <button class="chip" data-agrupacion="mes" aria-pressed="false">Por mes</button>
+            </div>
+            <div class="grafica-contenedor">
+                <div id="leyenda" class="leyenda"></div>
+                <svg id="grafica" width="100%" height="320" role="img" aria-label="Gráfica de temperatura en el tiempo"></svg>
+            </div>
+        </section>
+    </main>
+</div>
 
 <script src="assets/js/app.js"></script>
 </body>

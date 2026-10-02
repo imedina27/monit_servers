@@ -53,18 +53,53 @@ def conectar_db():
     )
 
 
-def obtener_servidor_id(conn, nombre, sistema_operativo, activo=True):
+def obtener_grupo_id(conn, ruta_grupo):
+    """
+    Crea (si hace falta) la cadena de grupos para una ruta tipo carpeta
+    ("Cliente/Ciudad") y devuelve el id del grupo mas profundo (la hoja de
+    la que cuelga el servidor). None si no se especifico 'grupo'.
+
+    No usa ON CONFLICT: el UNIQUE (nombre, grupo_padre_id) no detecta
+    duplicados cuando grupo_padre_id es NULL (nivel raiz), porque NULL no
+    es igual a NULL para una restriccion unica. Se busca primero y solo se
+    inserta si de verdad no existe.
+    """
+    if not ruta_grupo:
+        return None
+
+    grupo_padre_id = None
+    with conn.cursor() as cur:
+        for nombre_grupo in (p.strip() for p in ruta_grupo.split("/") if p.strip()):
+            if grupo_padre_id is None:
+                cur.execute("SELECT id FROM grupos WHERE nombre = %s AND grupo_padre_id IS NULL", (nombre_grupo,))
+            else:
+                cur.execute("SELECT id FROM grupos WHERE nombre = %s AND grupo_padre_id = %s", (nombre_grupo, grupo_padre_id))
+            fila = cur.fetchone()
+            if fila:
+                grupo_padre_id = fila[0]
+            else:
+                cur.execute(
+                    "INSERT INTO grupos (nombre, grupo_padre_id) VALUES (%s, %s) RETURNING id",
+                    (nombre_grupo, grupo_padre_id),
+                )
+                grupo_padre_id = cur.fetchone()[0]
+    conn.commit()
+    return grupo_padre_id
+
+
+def obtener_servidor_id(conn, nombre, sistema_operativo, activo, grupo_id):
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO servidores (nombre, sistema_operativo, activo)
-            VALUES (%s, %s, %s)
+            INSERT INTO servidores (nombre, sistema_operativo, activo, grupo_id)
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (nombre) DO UPDATE
                 SET sistema_operativo = EXCLUDED.sistema_operativo,
-                    activo = EXCLUDED.activo
+                    activo = EXCLUDED.activo,
+                    grupo_id = EXCLUDED.grupo_id
             RETURNING id
             """,
-            (nombre, sistema_operativo, activo),
+            (nombre, sistema_operativo, activo, grupo_id),
         )
         servidor_id = cur.fetchone()[0]
     conn.commit()
@@ -125,7 +160,8 @@ def procesar_online(nombre, servidor):
     conn = conectar_db()
     procesados, omitidos = 0, 0
     try:
-        servidor_id = obtener_servidor_id(conn, nombre, servidor["sistema_operativo"], servidor.get("activo", True))
+        grupo_id = obtener_grupo_id(conn, servidor.get("grupo"))
+        servidor_id = obtener_servidor_id(conn, nombre, servidor["sistema_operativo"], servidor.get("activo", True), grupo_id)
 
         cliente = paramiko.SSHClient()
         cliente.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -192,7 +228,8 @@ def procesar_offline(directorio_offline, inventario):
                 )
                 continue
 
-            servidor_id = obtener_servidor_id(conn, nombre_carpeta, servidor["sistema_operativo"], servidor.get("activo", True))
+            grupo_id = obtener_grupo_id(conn, servidor.get("grupo"))
+            servidor_id = obtener_servidor_id(conn, nombre_carpeta, servidor["sistema_operativo"], servidor.get("activo", True), grupo_id)
 
             for nombre_archivo in sorted(os.listdir(ruta_servidor)):
                 if not nombre_archivo.endswith(".csv"):
@@ -220,6 +257,21 @@ def procesar_offline(directorio_offline, inventario):
     return total_procesados
 
 
+def sincronizar_todo(inventario):
+    """
+    Da de alta/actualiza TODOS los servidores del inventario y sus grupos
+    (activos o no), para que el arbol del dashboard los vea aunque todavia
+    no se les este descargando informacion (ej. servidores de alta futura).
+    """
+    conn = conectar_db()
+    try:
+        for nombre, servidor in inventario.items():
+            grupo_id = obtener_grupo_id(conn, servidor.get("grupo"))
+            obtener_servidor_id(conn, nombre, servidor["sistema_operativo"], servidor.get("activo", True), grupo_id)
+    finally:
+        conn.close()
+
+
 # ─── Main ──────────────────────────────────────────────────────────────────────
 def main():
     logging.info("=== Iniciando ingesta ===")
@@ -229,6 +281,7 @@ def main():
     directorio_offline = os.path.join(PROJECT_DIR, config["ingesta"]["directorio_offline"])
 
     inventario = cargar_inventario()
+    sincronizar_todo(inventario)
     activos = {nombre: s for nombre, s in inventario.items() if s.get("activo", True)}
 
     total_procesados, total_omitidos = 0, 0
