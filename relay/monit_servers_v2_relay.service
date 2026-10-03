@@ -20,9 +20,13 @@ ExecStart=/usr/bin/python3 /home/quantum/check/monit_servers_v2/relay/relay.py
 Restart=on-failure
 RestartSec=30
 
-# Redirigir logs del sistema al archivo relay.log
-StandardOutput=append:/home/quantum/check/monit_servers_v2/relay/relay.log
-StandardError=append:/home/quantum/check/monit_servers_v2/relay/relay.log
+# OJO: no apuntar StandardOutput/StandardError a relay.log. systemd crea ese
+# archivo el mismo como root (antes de bajar privilegios al User= de arriba)
+# si no existe -- y relay.py tambien lo abre por su cuenta via
+# logging.basicConfig(), como 'quantum', lo que choca con el dueno root y
+# tumba el servicio en un loop de reinicio. relay.py ya maneja su propio
+# log; los logs del sistema quedan en el journal:
+# journalctl -u monit_servers_v2_relay.service
 
 [Install]
 WantedBy=multi-user.target

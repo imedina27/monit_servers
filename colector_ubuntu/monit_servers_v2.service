@@ -16,9 +16,13 @@ ExecStart=/usr/bin/python3 /home/quantum/check/monit_servers_v2/colector_ubuntu/
 Restart=on-failure
 RestartSec=10
 
-# Redirigir logs del sistema al archivo monitor.log
-StandardOutput=append:/home/quantum/check/monit_servers_v2/colector_ubuntu/monitor.log
-StandardError=append:/home/quantum/check/monit_servers_v2/colector_ubuntu/monitor.log
+# OJO: no apuntar StandardOutput/StandardError a monitor.log. systemd crea
+# ese archivo el mismo como root (antes de bajar privilegios al User= de
+# arriba) si no existe -- y monitor.py tambien lo abre por su cuenta via
+# logging.basicConfig(), como 'quantum', lo que choca con el dueno root y
+# tumba el servicio en un loop de reinicio. monitor.py ya maneja su propio
+# log; los logs del sistema (crashes no capturados, etc.) quedan en el
+# journal: journalctl -u monit_servers_v2.service
 
 [Install]
 WantedBy=multi-user.target
