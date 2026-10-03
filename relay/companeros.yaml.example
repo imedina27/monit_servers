@@ -1,0 +1,26 @@
+# Plantilla de companeros para el relay de este hub/gateway.
+# Copia este archivo a "companeros.yaml" y completa los datos reales.
+# companeros.yaml NO se sube a Git (ver .gitignore) -- las credenciales de
+# este archivo son propias de este sitio y nunca viven en el inventario
+# central ni en el repositorio.
+
+companeros:
+  - nombre: companero_01
+    ip: 192.168.X.X
+    puerto: 22
+    usuario: tu_usuario
+    # Si este sitio usa llaves SSH sin password (ej. AbInBev), deja
+    # 'password' vacio -- paramiko intenta la llave por defecto / el agente
+    # SSH automaticamente.
+    password: tu_password
+    # Debe coincidir con 'directorio_salida' del config.ini del colector
+    # en ese companero.
+    directorio_remoto: /home/tu_usuario/monit_servers_v2/colector_ubuntu/lecturas
+
+  # Agrega mas companeros copiando el bloque de arriba
+  # - nombre: companero_02
+  #   ip: 192.168.X.Y
+  #   puerto: 22
+  #   usuario: tu_usuario
+  #   password:
+  #   directorio_remoto: /home/tu_usuario/monit_servers_v2/colector_ubuntu/lecturas

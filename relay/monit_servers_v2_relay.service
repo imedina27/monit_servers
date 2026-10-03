@@ -1,0 +1,28 @@
+[Unit]
+Description=Relay de datos de companeros - Monit_Servers_V2 (recolecta de otros servidores de este sitio)
+After=network.target
+
+[Service]
+# Cambia 'quantum' por el usuario real del servidor
+User=quantum
+
+# Cambia la ruta al directorio donde clonaste el repositorio
+WorkingDirectory=/home/quantum/check/monit_servers_v2/relay
+
+# Ruta completa al python3 y al script. A diferencia del colector (stdlib
+# puro), el relay necesita 'paramiko'/'pyyaml' instalados -- si el servidor
+# usa conda y esos paquetes solo quedaron visibles ahi (no en el python3 del
+# sistema), apunta ExecStart al python3 de conda en vez de /usr/bin/python3
+# (verifica antes con: <python3_elegido> -c "import paramiko, yaml").
+ExecStart=/usr/bin/python3 /home/quantum/check/monit_servers_v2/relay/relay.py
+
+# Si el servicio falla, reiniciarlo automaticamente despues de 30 segundos
+Restart=on-failure
+RestartSec=30
+
+# Redirigir logs del sistema al archivo relay.log
+StandardOutput=append:/home/quantum/check/monit_servers_v2/relay/relay.log
+StandardError=append:/home/quantum/check/monit_servers_v2/relay/relay.log
+
+[Install]
+WantedBy=multi-user.target

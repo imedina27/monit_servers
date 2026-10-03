@@ -10,6 +10,11 @@ servidores:
     # automaticamente, la proxima vez que corra la ingesta.
     grupo: Quantum
     sistema_operativo: ubuntu       # ubuntu | windows
+    # activo es la bandera de online/offline: true = la ingesta se conecta
+    # por SSH automaticamente; false = no hay forma de llegar directo (la
+    # carga es manual, via ingesta/pendientes_offline/<nombre>/ - ver paso 11
+    # del ROADMAP). Si es false, ip/puerto/usuario/password no aplican y
+    # deben quedar vacios (ver ejemplo mas abajo).
     activo: true
     ip: 192.168.192.XXX
     puerto: 22
@@ -28,3 +33,49 @@ servidores:
   #   usuario: tu_usuario
   #   password: tu_password
   #   directorio_remoto: /home/tu_usuario/check/monit_servers_v2/colector_ubuntu/lecturas
+
+  # Ejemplo de servidor OFFLINE (sin alcance directo desde esta maquina):
+  # activo: false y las credenciales de conexion vacias. directorio_remoto se
+  # deja (es solo documentacion de donde escribe el colector en ese equipo,
+  # util para la carga manual), no se usa para conectarse.
+  # - nombre: servidor_03
+  #   grupo: Cliente/Ciudad
+  #   sistema_operativo: ubuntu
+  #   activo: false
+  #   ip:
+  #   puerto:
+  #   usuario:
+  #   password:
+  #   directorio_remoto: /home/tu_usuario/monit_servers_v2/colector_ubuntu/lecturas
+
+  # Ejemplo de servidor GATEWAY (online, ve a sus companeros offline en su
+  # propia LAN -- ver paso 14 del ROADMAP, "relay"). Ademas de sus propios
+  # datos (directorio_remoto normal), la ingesta online tambien baja por SFTP
+  # lo que su relay.py ya dejo en 'directorio_relay/<nombre_companero>/' y lo
+  # mete a pendientes_offline/<nombre_companero>/ local, para que
+  # procesar_offline() lo cargue en la misma pasada -- sin necesitar que
+  # alguien lo copie a mano.
+  # - nombre: servidor_gateway
+  #   grupo: Cliente/Ciudad
+  #   sistema_operativo: ubuntu
+  #   activo: true
+  #   ip: 192.168.192.ZZZ
+  #   puerto: 22
+  #   usuario: tu_usuario
+  #   password: tu_password
+  #   directorio_remoto: /home/tu_usuario/monit_servers_v2/colector_ubuntu/lecturas
+  #   directorio_relay: /home/tu_usuario/monit_servers_v2/relay/relay_entrante
+  #   es_gateway_de: [servidor_04]
+
+  # Los companeros del gateway tambien necesitan su propia entrada (activo:
+  # false, igual que cualquier servidor offline), para que procesar_offline()
+  # sepa a que servidor atribuir lo que el gateway recolecto de ellos.
+  # - nombre: servidor_04
+  #   grupo: Cliente/Ciudad
+  #   sistema_operativo: ubuntu
+  #   activo: false
+  #   ip:
+  #   puerto:
+  #   usuario:
+  #   password:
+  #   directorio_remoto: /home/tu_usuario/monit_servers_v2/colector_ubuntu/lecturas
