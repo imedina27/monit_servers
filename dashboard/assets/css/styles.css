@@ -315,10 +315,22 @@ section {
 }
 
 .tarjeta {
+    position: relative;
     background-color: var(--superficie);
     border: 1px solid var(--borde);
     border-radius: 10px;
-    padding: 16px;
+    padding: 16px 16px 20px;
+    overflow: hidden;
+}
+
+/* Franja inferior: mismo color que la linea de esta serie en la grafica,
+   para identificar de un vistazo a cual linea pertenece cada tarjeta. */
+.tarjeta__franja {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4px;
 }
 
 .tarjeta__titulo {
@@ -352,6 +364,25 @@ section {
 .punto-estado[data-estado="verde"] { background-color: var(--verde); }
 .punto-estado[data-estado="ambar"] { background-color: var(--ambar); }
 .punto-estado[data-estado="rojo"]  { background-color: var(--rojo); }
+
+/* Semaforo de 3 puntos fijos (tabla de "todos los sensores"): siempre se ven
+   los 3 colores, solo el que corresponde al estado actual queda "encendido". */
+.semaforo {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+}
+.semaforo__punto {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background-color: currentColor;
+    opacity: 0.25;
+}
+.semaforo__punto[data-color="verde"] { color: var(--verde); }
+.semaforo__punto[data-color="ambar"] { color: var(--ambar); }
+.semaforo__punto[data-color="rojo"]  { color: var(--rojo); }
+.semaforo__punto[data-activo="true"] { opacity: 1; }
 
 .tarjeta__sensor {
     font-size: 12px;
@@ -392,8 +423,16 @@ th {
    ============================================================ */
 .historico__controles {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.historico__chips {
+    display: flex;
+    gap: 8px;
 }
 
 .chip {
@@ -478,6 +517,22 @@ th {
 }
 .desplazador__miniatura.arrastrando {
     cursor: grabbing;
+}
+
+/* Tooltip de la grafica historica: usa variables de tema en CSS (no inline
+   styles calculados una sola vez en JS) para que siga el tema en vivo, aunque
+   el <div> se haya creado la primera vez en un tema distinto al actual. */
+.tooltip-grafica {
+    position: absolute;
+    pointer-events: none;
+    background-color: var(--superficie-2);
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+    display: none;
+    z-index: 10;
 }
 
 .mensaje-vacio {

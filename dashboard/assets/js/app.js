@@ -149,6 +149,17 @@ function initArbolClicks() {
     });
 }
 
+// Semaforo de 3 puntos fijos (verde/ambar/rojo) para la columna "Estado" de
+// la tabla de sensores -- sin texto, solo se "enciende" el que corresponde.
+function renderSemaforo(estadoActual) {
+    const colores = ["verde", "ambar", "rojo"];
+    return `
+        <span class="semaforo">
+            ${colores.map(c => `<span class="semaforo__punto" data-color="${c}" data-activo="${c === estadoActual}"></span>`).join("")}
+        </span>
+    `;
+}
+
 // ─── Estado actual (tarjetas + tabla) ──────────────────────────────────────
 async function cargarActual() {
     if (!estado.servidor) return;
@@ -168,14 +179,19 @@ async function cargarActual() {
         const cpu = lecturas.filter(l => l.componente === "cpu");
         const gpus = lecturas.filter(l => l.componente === "gpu").sort((a, b) => a.sensor.localeCompare(b.sensor));
 
+        // Mismo orden/paleta que la grafica (construirSeries): CPU siempre
+        // --serie-1, GPUs en orden alfabetico sobre --serie-2/--serie-3/--serie-1,
+        // asi la franja de color de la tarjeta coincide con la linea de la grafica.
+        const coloresGpu = ["--serie-2", "--serie-3", "--serie-1"];
+
         const tarjetas = [];
         if (cpu.length > 0) {
             const peor = cpu.reduce((max, l) => (l.temperatura_c > max.temperatura_c ? l : max), cpu[0]);
-            tarjetas.push({ titulo: "CPU (máx.)", sensor: peor.sensor, ...peor });
+            tarjetas.push({ titulo: "CPU (máx.)", sensor: peor.sensor, ...peor, color: cssVar("--serie-1") });
         }
-        for (const g of gpus) {
-            tarjetas.push({ titulo: g.sensor.replace("_", " "), sensor: g.sensor, ...g });
-        }
+        gpus.forEach((g, i) => {
+            tarjetas.push({ titulo: g.sensor.replace("_", " "), sensor: g.sensor, ...g, color: cssVar(coloresGpu[i % coloresGpu.length]) });
+        });
 
         contenedorTarjetas.innerHTML = tarjetas.map(t => `
             <div class="tarjeta">
@@ -184,6 +200,7 @@ async function cargarActual() {
                     <span class="punto-estado" data-estado="${t.estado || ''}"></span>${t.temperatura_c}<span class="tarjeta__unidad">°C</span>
                 </div>
                 <div class="tarjeta__sensor">${t.sensor}</div>
+                <div class="tarjeta__franja" style="background-color:${t.color}"></div>
             </div>
         `).join("");
 
@@ -192,7 +209,7 @@ async function cargarActual() {
                 <td>${l.componente}</td>
                 <td>${l.sensor}</td>
                 <td>${l.temperatura_c} °C</td>
-                <td><span class="punto-estado" data-estado="${l.estado || ''}"></span>${l.estado || '-'}</td>
+                <td>${renderSemaforo(l.estado)}</td>
                 <td>${new Date(l.medido_en).toLocaleString("es-MX")}</td>
             </tr>
         `).join("");
@@ -507,15 +524,7 @@ function activarTooltip(svg, series, periodosUnicos, x, y, margen, anchoUtil, ag
     if (!tooltip) {
         tooltip = document.createElement("div");
         tooltip.id = "tooltip-grafica";
-        tooltip.style.position = "absolute";
-        tooltip.style.pointerEvents = "none";
-        tooltip.style.background = cssVar("--superficie-2");
-        tooltip.style.border = `1px solid ${cssVar('--borde')}`;
-        tooltip.style.borderRadius = "6px";
-        tooltip.style.padding = "8px 10px";
-        tooltip.style.fontSize = "12px";
-        tooltip.style.display = "none";
-        tooltip.style.zIndex = "10";
+        tooltip.className = "tooltip-grafica";
         document.querySelector(".grafica-contenedor").style.position = "relative";
         document.querySelector(".grafica-contenedor").appendChild(tooltip);
     }

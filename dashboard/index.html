@@ -15,9 +15,6 @@
     </div>
     <h1 class="encabezado__titulo">Server Temperature Monitor</h1>
     <div class="encabezado__controles">
-        <button id="boton-actualizar" class="boton-actualizar" title="Descargar lecturas nuevas de los servidores">
-            <span class="boton-actualizar__icono">↻</span> Actualizar
-        </button>
         <button id="boton-tema" class="boton-tema" title="Cambiar tema" aria-label="Cambiar tema">
             <img id="icono-tema" src="assets/img/tema-oscuro.png" alt="">
         </button>
@@ -49,9 +46,14 @@
         <section id="seccion-historico">
             <h2>Histórico</h2>
             <div class="historico__controles" id="chips-agrupacion">
-                <button class="chip" data-agrupacion="hora" aria-pressed="true">Por hora</button>
-                <button class="chip" data-agrupacion="dia" aria-pressed="false">Por día</button>
-                <button class="chip" data-agrupacion="mes" aria-pressed="false">Por mes</button>
+                <div class="historico__chips">
+                    <button class="chip" data-agrupacion="hora" aria-pressed="true">Por hora</button>
+                    <button class="chip" data-agrupacion="dia" aria-pressed="false">Por día</button>
+                    <button class="chip" data-agrupacion="mes" aria-pressed="false">Por mes</button>
+                </div>
+                <button id="boton-actualizar" class="boton-actualizar" title="Descargar lecturas nuevas de los servidores">
+                    <span class="boton-actualizar__icono">↻</span> Actualizar
+                </button>
             </div>
             <div class="grafica-contenedor">
                 <div class="grafica-contenedor__barra">
