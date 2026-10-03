@@ -150,8 +150,64 @@ def parsear_lote(contenido):
     ]
 
 
+# ─── Recoleccion del relay de un gateway (ver paso 14 del ROADMAP) ────────────
+def recolectar_relay_gateway(sftp, nombre_gateway, servidor, directorio_offline):
+    """
+    Si este servidor es gateway de otros (campo 'es_gateway_de' en el
+    inventario), baja lo que su relay.py ya dejo en 'directorio_relay/<nombre
+    _companero>/' a 'pendientes_offline/<nombre_companero>/' local -- mismo
+    patron .tmp + rename atomico que usa relay.py, borrando del gateway solo
+    tras confirmar la escritura local. No inserta nada en la BD directamente:
+    procesar_offline() (que corre despues en el mismo ciclo) se encarga de
+    esos archivos igual que si hubieran llegado por USB.
+    """
+    companeros = servidor.get("es_gateway_de")
+    if not companeros:
+        return 0
+
+    directorio_relay = servidor.get("directorio_relay")
+    if not directorio_relay:
+        logging.warning(f"[{nombre_gateway}] Es gateway pero no tiene 'directorio_relay' configurado, se omite.")
+        return 0
+
+    recolectados = 0
+    for nombre_companero in companeros:
+        ruta_remota_companero = f"{directorio_relay}/{nombre_companero}"
+        carpeta_local = os.path.join(directorio_offline, nombre_companero)
+        os.makedirs(carpeta_local, exist_ok=True)
+
+        try:
+            archivos = sorted(f for f in sftp.listdir(ruta_remota_companero) if f.endswith(".csv"))
+        except FileNotFoundError:
+            archivos = []
+
+        for nombre_archivo in archivos:
+            ruta_remota = f"{ruta_remota_companero}/{nombre_archivo}"
+            ruta_local = os.path.join(carpeta_local, nombre_archivo)
+            ruta_local_tmp = ruta_local + ".tmp"
+
+            if not os.path.exists(ruta_local):
+                with sftp.open(ruta_remota, "r") as f:
+                    contenido = f.read()
+                with open(ruta_local_tmp, "wb") as f:
+                    f.write(contenido)
+                os.replace(ruta_local_tmp, ruta_local)
+
+            try:
+                sftp.remove(ruta_remota)
+                recolectados += 1
+                logging.info(f"[{nombre_gateway}->{nombre_companero}] Recolectado: {nombre_archivo}")
+            except Exception as e:
+                logging.warning(
+                    f"[{nombre_gateway}->{nombre_companero}] Descargado pero no se pudo "
+                    f"borrar {nombre_archivo} del gateway: {e}"
+                )
+
+    return recolectados
+
+
 # ─── Ingesta online (SSH/SFTP) ────────────────────────────────────────────────
-def procesar_online(nombre, servidor):
+def procesar_online(nombre, servidor, directorio_offline):
     """
     Abre su propia conexion a la BD y al servidor (se ejecuta en su propio
     hilo). Descarga cada archivo pendiente directo a memoria, lo carga a la
@@ -198,6 +254,11 @@ def procesar_online(nombre, servidor):
 
             logging.info(f"[{nombre}] Cargado: {nombre_archivo} ({len(filas)} lecturas)")
             procesados += 1
+
+        try:
+            recolectar_relay_gateway(sftp, nombre, servidor, directorio_offline)
+        except Exception as e:
+            logging.error(f"[{nombre}] Error recolectando relay de companeros: {e}")
 
         sftp.close()
         cliente.close()
@@ -330,7 +391,7 @@ def main():
 
     config = cargar_configuracion()
     max_workers = int(config["ingesta"]["max_workers"])
-    directorio_offline = os.path.join(PROJECT_DIR, config["ingesta"]["directorio_offline"])
+    directorio_offline = os.path.join(BASE_DIR, config["ingesta"]["directorio_offline"])
 
     inventario = cargar_inventario()
     sincronizar_todo(inventario)
@@ -338,7 +399,7 @@ def main():
 
     total_procesados, total_omitidos = 0, 0
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futuros = {pool.submit(procesar_online, nombre, s): nombre for nombre, s in activos.items()}
+        futuros = {pool.submit(procesar_online, nombre, s, directorio_offline): nombre for nombre, s in activos.items()}
         for futuro in as_completed(futuros):
             nombre = futuros[futuro]
             try:
