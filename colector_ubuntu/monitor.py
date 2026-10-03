@@ -47,9 +47,10 @@ def detectar_metodo_cpu():
     """
     resultado = ejecutar_comando("which sensors")
     if resultado:
-        # Verificar que sensors devuelve datos utiles
+        # Verificar que sensors devuelve datos utiles (cualquier chip, no solo
+        # coretemp de Intel -- ver parsear_cpu_sensors)
         salida = ejecutar_comando("sensors")
-        if "Core" in salida or "Package" in salida:
+        if parsear_cpu_sensors(salida):
             logging.info("Metodo CPU detectado: lm-sensors")
             return "sensors"
 
@@ -81,18 +82,52 @@ def detectar_gpu():
 
 # ─── Parsear temperaturas CPU via lm-sensors ─────────────────────────────────
 def parsear_cpu_sensors(salida_sensors):
+    """
+    No filtra por nombre de etiqueta (Core/Package son de Intel/coretemp;
+    otros chips como k10temp de AMD usan Tctl/Tccd, y habria mas nombres
+    segun el fabricante). En vez de eso, valida que el valor termine en
+    "C"/"°C" -- asi reconoce cualquier chip de temperatura, y de paso evita
+    falsos positivos de lineas de ventilador (RPM) o voltaje (V) que algunos
+    chips de sensores de la board exponen en la misma salida de 'sensors'.
+
+    Si el mismo nombre de sensor aparece en mas de un chip (ej. "Tctl" en
+    cada socket de un servidor de 2 CPUs), el segundo en adelante se
+    desambigua con el identificador del chip -- sin esto se pisarian entre
+    si y se perderia la lectura de un socket completo. Los sensores de un
+    solo chip (el caso de todos los despliegues actuales) no cambian de
+    nombre, para no romper el historial ya guardado en Postgres.
+    """
     temperaturas = {}
+    chip_actual = ""
     for linea in salida_sensors.splitlines():
-        if any(clave in linea for clave in ["Core", "Package"]):
-            partes = linea.split(":")
-            if len(partes) == 2:
-                nombre = partes[0].strip()
-                valor_str = partes[1].strip().split()[0]
-                valor_str = valor_str.replace("+", "").replace("°C", "").replace("C", "")
-                try:
-                    temperaturas[nombre] = round(float(valor_str), 1)
-                except ValueError:
-                    pass
+        linea_stripped = linea.strip()
+        if not linea_stripped:
+            chip_actual = ""
+            continue
+        if ":" not in linea_stripped:
+            chip_actual = linea_stripped
+            continue
+
+        partes = linea.split(":")
+        if len(partes) != 2:
+            continue
+        valores = partes[1].strip().split()
+        if not valores:
+            continue
+        valor_crudo = valores[0]
+        if not valor_crudo.endswith(("°C", "C")):
+            continue
+
+        nombre = partes[0].strip()
+        valor_str = valor_crudo.replace("+", "").replace("°C", "").replace("C", "")
+        try:
+            valor = round(float(valor_str), 1)
+        except ValueError:
+            continue
+
+        if nombre in temperaturas:
+            nombre = f"{chip_actual}_{nombre}" if chip_actual else f"{nombre}_2"
+        temperaturas[nombre] = valor
     return temperaturas
 
 # ─── Parsear temperaturas CPU via thermal zones ───────────────────────────────
