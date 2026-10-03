@@ -1,6 +1,6 @@
 # Monitoreo de Temperaturas V2
 
-Sistema centralizado para monitorear temperaturas de CPU/GPU de 15-20 servidores (Ubuntu y Windows), con base de datos PostgreSQL, dashboard web y widget de Rainmeter. Reemplaza el esquema anterior basado en CSV + Excel/Power Query (ver proyecto `Monit_Servers`).
+Sistema centralizado para monitorear temperaturas de CPU/GPU de 15-20 servidores (Ubuntu y Windows), con base de datos PostgreSQL y dashboard web. Reemplaza el esquema anterior basado en CSV + Excel/Power Query (ver proyecto `Monit_Servers`).
 
 ## Estado
 
@@ -16,9 +16,8 @@ En construcción. Ver [ROADMAP.md](ROADMAP.md) para el plan de trabajo paso a pa
 
 - **Colectores**: un programa por SO (Ubuntu/Windows) que mide temperatura de CPU/GPU en cada servidor.
 - **Ingesta**: módulo único que descarga datos (modo online, vía scheduler) o procesa archivos entregados manualmente (modo offline), y los carga a Postgres.
-- **Backend/API**: capa compartida que sirve agregaciones por hora/día/mes tanto al dashboard como al widget de Rainmeter.
+- **Backend/API**: capa que sirve agregaciones por hora/día/mes al dashboard.
 - **Dashboard HTML**: visualización de variaciones de temperatura por hora/día/mes.
-- **Widget de Rainmeter**: temperatura por hora de 2-3 servidores seleccionados, con indicador tipo semáforo (verde/ámbar/rojo).
 
 ## Instalación
 
@@ -108,6 +107,10 @@ journalctl -u monit_servers_v2 -f
 #### Paso 5 — Agregar el servidor al inventario central
 
 En la máquina donde corre la ingesta (ver [`ingesta/`](ingesta/)), agrega el servidor a `inventario_servidores.yaml` (copiar de [`inventario_servidores.yaml.example`](inventario_servidores.yaml.example) si aún no existe), con un `directorio_remoto` idéntico al `directorio_salida` del paso 2. Sin este paso la ingesta no sabe que el servidor existe y no va a descargar nada de él.
+
+`activo: true` = servidor online (la ingesta se conecta por SSH automáticamente); `activo: false` = offline, sin alcance directo desde esta máquina (`ip`/`puerto`/`usuario`/`password` quedan vacíos) — la carga es manual vía `ingesta/pendientes_offline/<nombre_servidor>/` (ver sección de ingesta más abajo).
+
+Agregar un servidor nuevo al YAML es automático: la próxima vez que corra la ingesta (botón "Actualizar" o el ciclo online) hace *upsert* en Postgres, sin tocar la base de datos a mano. **Quitar uno no lo es** — la sincronización nunca borra, así que un servidor retirado del YAML se queda huérfano en la base de datos hasta que lo borres explícitamente con [`db/eliminar_servidor.py`](db/eliminar_servidor.py) (ver "Eliminar un servidor" más abajo).
 
 ### Colector Windows
 
@@ -264,6 +267,16 @@ pipenv run python db/restaurar.py bkp/Data_Base/monit_srv_011026.sql
 
 Si no indicas el archivo, te deja elegir entre los respaldos disponibles en `bkp/Data_Base/`. Pide confirmación explícita antes de ejecutar, ya que reemplaza todo el contenido de la base.
 
+### Eliminar un servidor
+
+Quitar un servidor de `inventario_servidores.yaml` **no lo borra de Postgres** — la sincronización de la ingesta solo agrega/actualiza, nunca elimina. Para darlo de baja también en la base de datos:
+
+```bash
+pipenv run python db/eliminar_servidor.py QLYMSPROD02
+```
+
+Si no indicas el nombre, te deja elegir entre los servidores existentes (con su conteo de lecturas). Muestra cuántas lecturas y archivos ya ingeridos tiene antes de borrar, pide confirmación explícita (escribir `'si'`), borra en el orden correcto (`archivos_ingeridos` → `lecturas` → `servidores`) y limpia los grupos del árbol que queden vacíos tras el borrado. El script **solo toca Postgres** — recuerda quitar también la entrada de `inventario_servidores.yaml` si es un retiro definitivo.
+
 ## Estructura del proyecto
 
 ```text
@@ -278,6 +291,14 @@ Monit_Servers_V2/
 │   ├── config.ini
 │   └── pendientes_offline/                ← (gitignored) archivos offline manuales, por servidor
 │
+├── relay/                                 ← Se instala en el servidor "hub"/gateway de un sitio offline
+│   ├── relay.py
+│   ├── config.ini
+│   ├── companeros.yaml.example            ← plantilla versionada
+│   ├── companeros.yaml                    ← (gitignored) credenciales reales de ese sitio
+│   ├── monit_servers_v2_relay.service
+│   └── relay_entrante/                    ← (gitignored) lecturas recolectadas de los companeros, por nombre
+│
 ├── backend/                               ← API (FastAPI) + sirve el dashboard
 │   ├── main.py
 │   ├── umbrales.yaml                      ← umbrales del semaforo (verde/ambar/rojo)
@@ -291,7 +312,8 @@ Monit_Servers_V2/
 │   ├── schema.sql
 │   ├── migrar_historico_csv.py
 │   ├── respaldar.py
-│   └── restaurar.py
+│   ├── restaurar.py
+│   └── eliminar_servidor.py
 │
 ├── bkp/Data_Base/                         ← (gitignored) respaldos .sql generados por respaldar.py
 │
