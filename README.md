@@ -96,6 +96,8 @@ sudo systemctl status monit_servers_v2
 ```
 
 > ⚠️ El nombre del servicio es `monit_servers_v2`, **distinto** del servicio viejo `monit_servers` (proyecto `Monit_Servers`), que puede seguir activo en el mismo servidor durante la transición. No lo detengas ni lo reemplaces sin confirmarlo antes — ambos pueden convivir sin conflicto porque usan rutas y unidades systemd separadas.
+>
+> ⚠️ **No agregues `StandardOutput=append:.../monitor.log` ni `StandardError=...` al `.service`** (la plantilla ya no los trae, a propósito). `systemd` crearía ese archivo él mismo como `root` antes de bajar privilegios al `User=` configurado, y como `monitor.py` también lo abre por su cuenta (`logging.basicConfig`), el segundo intento choca con el dueño `root` y el servicio entra en loop de reinicio con `PermissionError`. Si esto ya te pasó (el servicio queda `activating (auto-restart)` en vez de `active (running)`), corrígelo con `sudo chown quantum:quantum monitor.log` (ajusta el usuario) y `sudo systemctl restart monit_servers_v2`. Los errores no capturados por el log de aplicación quedan en `journalctl -u monit_servers_v2`.
 
 Comandos útiles:
 
@@ -111,6 +113,99 @@ En la máquina donde corre la ingesta (ver [`ingesta/`](ingesta/)), agrega el se
 `activo: true` = servidor online (la ingesta se conecta por SSH automáticamente); `activo: false` = offline, sin alcance directo desde esta máquina (`ip`/`puerto`/`usuario`/`password` quedan vacíos) — la carga es manual vía `ingesta/pendientes_offline/<nombre_servidor>/` (ver sección de ingesta más abajo).
 
 Agregar un servidor nuevo al YAML es automático: la próxima vez que corra la ingesta (botón "Actualizar" o el ciclo online) hace *upsert* en Postgres, sin tocar la base de datos a mano. **Quitar uno no lo es** — la sincronización nunca borra, así que un servidor retirado del YAML se queda huérfano en la base de datos hasta que lo borres explícitamente con [`db/eliminar_servidor.py`](db/eliminar_servidor.py) (ver "Eliminar un servidor" más abajo).
+
+### Relay (sitios offline con compañeros, o con gateway online)
+
+Para sitios donde varios servidores se ven entre sí en su propia red, pero no todos son alcanzables directo desde la máquina central (ver [ROADMAP.md](ROADMAP.md), paso 14). Hay **4 escenarios posibles**; los dos primeros ya están cubiertos por "Colector Ubuntu" de arriba, sin nada adicional:
+
+| Escenario | ¿Necesita `relay/`? | `activo` en el inventario central | Carga a Postgres |
+| --- | --- | --- | --- |
+| Servidor simple, online | No | `true` | Automática (ingesta por SSH directo) |
+| Servidor simple, offline (sin compañeros) | No | `false` | Manual, vía `pendientes_offline/<nombre>/` |
+| **Sitio 100% offline con un "hub"** (ej. AbInBev) | Sí, en el hub | `false` (ni el hub ni sus compañeros son alcanzables) | Manual — alguien trae el bundle consolidado del hub |
+| **Sitio con gateway online** (ej. API/Manzanillo) | Sí, en el gateway | `true` en el gateway, `false` en cada compañero | Automática — la ingesta baja sola lo que el gateway recolectó |
+
+La diferencia entre los dos últimos es solo si el servidor que corre `relay.py` (el "hub"/"gateway") es alcanzable o no desde la máquina central — el `relay.py` y el flujo de instalación son **idénticos** en ambos casos.
+
+#### Paso 1 — Instalar el colector en cada compañero
+
+Igual que "Colector Ubuntu" arriba (pasos 1-4), en cada servidor compañero del sitio. Estos normalmente **no** son alcanzables directo desde la máquina central (por eso necesitan el relay) — despliega los archivos por el medio que tengas disponible hacia ese sitio (USB, u otro servidor del mismo sitio que sí tenga acceso).
+
+#### Paso 2 — Instalar `relay.py` en el hub/gateway
+
+Requisitos: a diferencia del colector (stdlib puro), `relay.py` necesita `paramiko`/`pyyaml`:
+
+```bash
+python3 -c "import paramiko, yaml" || pip3 install paramiko pyyaml
+```
+
+> ⚠️ Si el servidor usa **conda**, verifica que el `python3` que vas a poner en `ExecStart` del `.service` sea el mismo donde quedaron instalados esos paquetes (`<python3_elegido> -c "import paramiko, yaml"`) — si conda estaba activo cuando corriste el `pip install`, pueden haber quedado invisibles para `/usr/bin/python3` del sistema. Ajusta `ExecStart` al Python de conda si hace falta.
+
+Copia la carpeta [`relay/`](relay/) (`relay.py`, `config.ini`, `monit_servers_v2_relay.service`) al hub, por ejemplo a `/home/quantum/monit_servers_v2/relay/`.
+
+Crea `companeros.yaml` a partir de [`companeros.yaml.example`](relay/companeros.yaml.example) — **este archivo vive solo en el hub, nunca se sube a git** (ver `.gitignore`), con las credenciales reales de cada compañero de este sitio (usuario/password, o deja `password` vacío si el sitio usa llaves SSH sin contraseña, como en AbInBev — verifica antes con `ssh -v <companero> exit` y `ssh-keygen -y -f <ruta_llave>` que la llave por defecto no tenga passphrase, para que funcione igual corriendo como servicio que a mano):
+
+```yaml
+companeros:
+  - nombre: <nombre_companero>          # debe coincidir con el inventario central (paso 3)
+    ip: <ip_o_hostname_companero>
+    puerto: 22
+    usuario: <usuario>
+    password: <password_o_vacio_si_usa_llave>
+    directorio_remoto: /home/<usuario>/monit_servers_v2/colector_ubuntu/lecturas
+```
+
+Instala el servicio (mismo patrón que el colector — ver la advertencia de `StandardOutput`/`StandardError` arriba, aplica igual aquí):
+
+```bash
+nano monit_servers_v2_relay.service   # ajusta usuario/rutas/python3
+sudo cp monit_servers_v2_relay.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable monit_servers_v2_relay
+sudo systemctl start monit_servers_v2_relay
+sudo systemctl status monit_servers_v2_relay
+tail -f relay.log
+```
+
+Revisa `relay.log`: debe mostrar `Recolectado: <archivo>` por cada compañero con datos pendientes, y los `.csv` deben aparecer en `relay_entrante/<nombre_companero>/`.
+
+#### Paso 3 — Configurar el inventario central (`inventario_servidores.yaml`)
+
+**Cada compañero** necesita su propia entrada, siempre `activo: false` (nunca se conecta directo a él, ni en el caso de gateway online):
+
+```yaml
+  - nombre: <nombre_companero>
+    grupo: <Cliente>/<Sitio>
+    sistema_operativo: ubuntu
+    activo: false
+    ip:
+    puerto:
+    usuario:
+    password:
+    directorio_remoto: /home/<usuario>/monit_servers_v2/colector_ubuntu/lecturas
+```
+
+**La entrada del hub/gateway** cambia según el escenario:
+
+- **Sitio 100% offline (hub no alcanzable)** — igual que un servidor offline normal (`activo: false`, sin credenciales). La carga es manual: trae periódicamente (USB u otro medio) tanto `colector_ubuntu/lecturas/` (lo propio del hub) como `relay/relay_entrante/<companero>/` (lo de cada compañero) a `ingesta/pendientes_offline/<nombre_correspondiente>/` en la máquina central, y dispara la ingesta (botón "Actualizar").
+
+- **Sitio con gateway online (alcanzable directo)** — `activo: true` con sus credenciales reales de SSH, más dos campos nuevos:
+
+  ```yaml
+    - nombre: <nombre_gateway>
+      grupo: <Cliente>/<Sitio>
+      sistema_operativo: ubuntu
+      activo: true
+      ip: <ip_real>
+      puerto: 22
+      usuario: <usuario>
+      password: <password>
+      directorio_remoto: /home/<usuario>/monit_servers_v2/colector_ubuntu/lecturas
+      directorio_relay: /home/<usuario>/monit_servers_v2/relay/relay_entrante
+      es_gateway_de: [<companero_1>, <companero_2>]
+  ```
+
+  Con esto, la ingesta (`recolectar_relay_gateway()` en `ingesta/ingesta.py`) baja sola por SFTP lo que el relay dejó en `directorio_relay/<companero>/` y lo carga a Postgres en la misma pasada — no hace falta copiar nada a mano.
 
 ### Colector Windows
 
