@@ -182,8 +182,8 @@ async function cargarActual() {
         const cpu = lecturas.filter(l => l.componente === "cpu");
         const gpus = lecturas.filter(l => l.componente === "gpu").sort((a, b) => a.sensor.localeCompare(b.sensor));
 
-        // Subtitulo: modelo de hardware + nucleos si estan en hardware.yaml,
-        // si no cae de vuelta al nombre crudo del sensor (comportamiento de siempre).
+        // Subtitulo: modelo de hardware + nucleos si el servidor los tiene cargados
+        // en Postgres, si no cae de vuelta al nombre crudo del sensor (comportamiento de siempre).
         const subtituloCpu = hardware.cpu_modelo
             ? `${hardware.cpu_modelo}${hardware.cpu_nucleos ? ` (${hardware.cpu_nucleos} cores)` : ""}`
             : null;

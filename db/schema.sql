@@ -40,6 +40,69 @@ CREATE TABLE lecturas (
 -- Acelera las consultas del dashboard/API (agregaciones por servidor y rango de fecha).
 CREATE INDEX idx_lecturas_servidor_fecha ON lecturas (servidor_id, medido_en DESC);
 
+-- Hardware (informativo, solo para mostrarse en el dashboard -- no afecta el
+-- calculo del semaforo). Administrado a mano via db/gestionar_servidor.py;
+-- la sincronizacion automatica de ingesta.py (sincronizar_todo) nunca escribe
+-- aqui, solo conoce nombre/grupo/activo.
+CREATE TABLE hardware_chassis (
+    servidor_id  INTEGER PRIMARY KEY REFERENCES servidores(id) ON DELETE CASCADE,
+    marca        VARCHAR(50),
+    modelo       VARCHAR(100),
+    numero_serie VARCHAR(50),
+    so_version   VARCHAR(30)  -- version exacta del SO, ej "Ubuntu 22.04.5 LTS" (sistema_operativo en 'servidores' solo guarda la familia)
+);
+
+CREATE TABLE hardware_cpu (
+    servidor_id INTEGER PRIMARY KEY REFERENCES servidores(id) ON DELETE CASCADE,
+    modelo      VARCHAR(100) NOT NULL,
+    nucleos     INTEGER
+);
+
+CREATE TABLE hardware_gpu (
+    servidor_id INTEGER PRIMARY KEY REFERENCES servidores(id) ON DELETE CASCADE,
+    modelo      VARCHAR(100) NOT NULL,
+    nucleos     INTEGER
+);
+
+CREATE TABLE hardware_ram (
+    servidor_id INTEGER PRIMARY KEY REFERENCES servidores(id) ON DELETE CASCADE,
+    total_gb    INTEGER NOT NULL
+);
+
+-- Un servidor puede tener varios discos (o un solo "volumen logico" si un
+-- RAID por hardware esconde los discos fisicos reales -- ver 'raid' abajo).
+CREATE TABLE discos (
+    id          SERIAL PRIMARY KEY,
+    servidor_id INTEGER NOT NULL REFERENCES servidores(id) ON DELETE CASCADE,
+    marca       VARCHAR(50),
+    modelo      VARCHAR(100) NOT NULL,
+    tipo        VARCHAR(20) NOT NULL CHECK (tipo IN ('ssd', 'hdd', 'nvme', 'logico')),
+    capacidad   VARCHAR(20) NOT NULL,  -- tal cual lo reporta el SO, ej "953.9G" -- evita errores de conversion de unidades
+    transporte  VARCHAR(10)            -- sata/sas/nvme; puede quedar vacio si no se detecto
+);
+
+-- Un servidor puede tener mas de un arreglo (ej. RAID0 de boot + RAID1 de
+-- datos), por eso NO es 1:1 como hardware_cpu/gpu/ram -- servidor_id se
+-- repite si hace falta.
+CREATE TABLE raid (
+    id          SERIAL PRIMARY KEY,
+    servidor_id INTEGER NOT NULL REFERENCES servidores(id) ON DELETE CASCADE,
+    tipo        VARCHAR(20) NOT NULL CHECK (tipo IN ('ninguno', 'software', 'hardware', 'desconocido')),
+    nivel       VARCHAR(20),
+    descripcion TEXT
+);
+
+-- Umbrales de temperatura por servidor (verde/ambar/rojo). El fallback
+-- generico para un servidor sin fila aqui vive en backend/main.py
+-- (UMBRALES_DEFAULT) -- no es dato de ningun servidor en particular.
+CREATE TABLE umbrales (
+    servidor_id INTEGER NOT NULL REFERENCES servidores(id) ON DELETE CASCADE,
+    componente  VARCHAR(10) NOT NULL CHECK (componente IN ('cpu', 'gpu')),
+    verde_max   NUMERIC(4,1) NOT NULL,
+    ambar_max   NUMERIC(4,1) NOT NULL,
+    PRIMARY KEY (servidor_id, componente)
+);
+
 -- Registro de que archivos ya se cargaron a la BD (online y offline).
 -- Permite al modulo de ingesta saber que esta pendiente y evitar cargar
 -- el mismo archivo dos veces (UNIQUE sobre servidor_id + nombre_archivo).

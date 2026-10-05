@@ -2,7 +2,6 @@ import os
 import sys
 from pathlib import Path
 
-import yaml
 import psycopg2
 import psycopg2.extras
 from fastapi import FastAPI, HTTPException, Query
@@ -18,11 +17,12 @@ load_dotenv(PROJECT_DIR / ".env")
 # sin tener que lanzar un proceso aparte.
 sys.path.insert(0, str(PROJECT_DIR / "ingesta"))
 
-with open(BASE_DIR / "umbrales.yaml", encoding="utf-8") as f:
-    UMBRALES = yaml.safe_load(f)
-
-with open(BASE_DIR / "hardware.yaml", encoding="utf-8") as f:
-    HARDWARE = yaml.safe_load(f) or {}
+# Fallback cuando un servidor no tiene fila propia en la tabla 'umbrales' --
+# no es dato de ningun servidor en particular, por eso vive aqui y no en la BD.
+UMBRALES_DEFAULT = {
+    "cpu": {"verde_max": 70, "ambar_max": 85},
+    "gpu": {"verde_max": 75, "ambar_max": 85},
+}
 
 app = FastAPI(title="Monit Servers V2 - API")
 
@@ -37,10 +37,7 @@ def conectar_db():
     )
 
 
-def calcular_estado(nombre_servidor, componente, temperatura_c):
-    rangos = UMBRALES["por_servidor"].get(nombre_servidor, {}).get(componente)
-    if rangos is None:
-        rangos = UMBRALES["default"].get(componente)
+def calcular_estado(rangos, temperatura_c):
     if rangos is None:
         return None
     if temperatura_c <= rangos["verde_max"]:
@@ -48,6 +45,17 @@ def calcular_estado(nombre_servidor, componente, temperatura_c):
     if temperatura_c <= rangos["ambar_max"]:
         return "ambar"
     return "rojo"
+
+
+def obtener_umbrales_servidor(cur, servidor_id):
+    cur.execute(
+        "SELECT componente, verde_max, ambar_max FROM umbrales WHERE servidor_id = %s",
+        (servidor_id,),
+    )
+    return {
+        fila["componente"]: {"verde_max": float(fila["verde_max"]), "ambar_max": float(fila["ambar_max"])}
+        for fila in cur.fetchall()
+    }
 
 
 def obtener_servidor_id(cur, nombre):
@@ -127,6 +135,7 @@ def listar_arbol():
 def temperatura_actual(nombre: str):
     with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         servidor_id = obtener_servidor_id(cur, nombre)
+        umbrales_servidor = obtener_umbrales_servidor(cur, servidor_id)
         cur.execute(
             """
             SELECT DISTINCT ON (componente, sensor)
@@ -140,13 +149,56 @@ def temperatura_actual(nombre: str):
         filas = cur.fetchall()
 
     for fila in filas:
-        fila["estado"] = calcular_estado(nombre, fila["componente"], float(fila["temperatura_c"]))
+        rangos = umbrales_servidor.get(fila["componente"]) or UMBRALES_DEFAULT.get(fila["componente"])
+        fila["estado"] = calcular_estado(rangos, float(fila["temperatura_c"]))
     return filas
 
 
 @app.get("/api/servidores/{nombre}/hardware")
 def hardware_servidor(nombre: str):
-    return HARDWARE.get(nombre, {})
+    with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        servidor_id = obtener_servidor_id(cur, nombre)
+
+        resultado = {}
+
+        cur.execute(
+            "SELECT marca, modelo, numero_serie, so_version FROM hardware_chassis WHERE servidor_id = %s",
+            (servidor_id,),
+        )
+        fila = cur.fetchone()
+        if fila:
+            resultado["chasis"] = fila
+
+        cur.execute("SELECT modelo, nucleos FROM hardware_cpu WHERE servidor_id = %s", (servidor_id,))
+        fila = cur.fetchone()
+        if fila:
+            resultado["cpu_modelo"] = fila["modelo"]
+            resultado["cpu_nucleos"] = fila["nucleos"]
+
+        cur.execute("SELECT modelo, nucleos FROM hardware_gpu WHERE servidor_id = %s", (servidor_id,))
+        fila = cur.fetchone()
+        if fila:
+            resultado["gpu_modelo"] = fila["modelo"]
+            resultado["gpu_nucleos"] = fila["nucleos"]
+
+        cur.execute("SELECT total_gb FROM hardware_ram WHERE servidor_id = %s", (servidor_id,))
+        fila = cur.fetchone()
+        if fila:
+            resultado["ram_total_gb"] = fila["total_gb"]
+
+        cur.execute(
+            "SELECT marca, modelo, tipo, capacidad, transporte FROM discos WHERE servidor_id = %s ORDER BY id",
+            (servidor_id,),
+        )
+        resultado["discos"] = cur.fetchall()
+
+        cur.execute(
+            "SELECT tipo, nivel, descripcion FROM raid WHERE servidor_id = %s ORDER BY id",
+            (servidor_id,),
+        )
+        resultado["raid"] = cur.fetchall()
+
+    return resultado
 
 
 @app.get("/api/servidores/{nombre}/historico")

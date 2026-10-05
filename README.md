@@ -125,7 +125,9 @@ En la máquina donde corre la ingesta (ver [`ingesta/`](ingesta/)), agrega el se
 
 `activo: true` = servidor online (la ingesta se conecta por SSH automáticamente); `activo: false` = offline, sin alcance directo desde esta máquina (`ip`/`puerto`/`usuario`/`password` quedan vacíos) — la carga es manual vía `ingesta/pendientes_offline/<nombre_servidor>/` (ver sección de ingesta más abajo).
 
-Agregar un servidor nuevo al YAML es automático: la próxima vez que corra la ingesta (botón "Actualizar" o el ciclo online) hace *upsert* en Postgres, sin tocar la base de datos a mano. **Quitar uno no lo es** — la sincronización nunca borra, así que un servidor retirado del YAML se queda huérfano en la base de datos hasta que lo borres explícitamente con [`db/eliminar_servidor.py`](db/eliminar_servidor.py) (ver "Eliminar un servidor" más abajo).
+Agregar un servidor nuevo al YAML es automático: la próxima vez que corra la ingesta (botón "Actualizar" o el ciclo online) hace *upsert* en Postgres (tabla `servidores`/`grupos`), sin tocar la base de datos a mano. **Quitar uno no lo es** — la sincronización nunca borra, así que un servidor retirado del YAML se queda huérfano en la base de datos hasta que lo borres explícitamente con [`db/gestionar_servidor.py`](db/gestionar_servidor.py) (ver "Administrar un servidor" más abajo).
+
+Una vez que el servidor ya existe en Postgres (después del primer `upsert` de arriba), usa el mismo script para darle de alta su hardware (chasis, CPU/GPU/RAM/discos/RAID, solo informativo) y sus umbrales de temperatura (verde/ámbar/rojo) — ver "Administrar un servidor".
 
 ### Relay (sitios offline con compañeros, o con gateway online)
 
@@ -271,11 +273,9 @@ copy inventario_servidores.yaml.example inventario_servidores.yaml
 
 Completa ahí los servidores reales (ver paso 5 de la instalación del colector Ubuntu, arriba). El campo `grupo` (ej. `Quantum` o `AbInBev/Zacatecas`) define dónde aparece cada servidor en el árbol del dashboard — la ingesta crea los niveles que falten automáticamente.
 
-#### Paso 5 — (Opcional) Ajustar los umbrales del semáforo
+#### Paso 5 — (Opcional) Umbrales del semáforo y hardware
 
-Edita [`backend/umbrales.yaml`](backend/umbrales.yaml) si los valores provisionales de temperatura (verde/ámbar/rojo) no son los que necesitas. El bloque `default` aplica a todos los servidores; para uno en particular (hardware conocido) puedes agregar un override bajo `por_servidor.<nombre>` (debe coincidir con el `nombre` en `inventario_servidores.yaml`).
-
-Opcionalmente, edita [`backend/hardware.yaml`](backend/hardware.yaml) para que las tarjetas de "Estado actual" del dashboard muestren el modelo de CPU/GPU y su número de núcleos en vez del nombre crudo del sensor (ej. "Intel Xeon E5-2630 v4 (10 cores)" en vez de "Core_0"). Es solo informativo — no afecta el semáforo.
+Los umbrales de temperatura (verde/ámbar/rojo) y el hardware (chasis, CPU/GPU/RAM/discos/RAID, solo informativo para el dashboard) viven en Postgres, no en archivos — ver "Administrar un servidor" más abajo. Un servidor sin umbral propio usa el default genérico (`UMBRALES_DEFAULT` en `backend/main.py`); un servidor sin hardware cargado simplemente no muestra esa info en el dashboard.
 
 #### Paso 6 — Levantar el servidor
 
@@ -379,15 +379,17 @@ pipenv run python db/restaurar.py bkp/Data_Base/monit_srv_011026.sql
 
 Si no indicas el archivo, te deja elegir entre los respaldos disponibles en `bkp/Data_Base/`. Pide confirmación explícita antes de ejecutar, ya que reemplaza todo el contenido de la base.
 
-### Eliminar un servidor
+### Administrar un servidor (hardware, umbrales, baja)
 
-Quitar un servidor de `inventario_servidores.yaml` **no lo borra de Postgres** — la sincronización de la ingesta solo agrega/actualiza, nunca elimina. Para darlo de baja también en la base de datos:
+[`db/gestionar_servidor.py`](db/gestionar_servidor.py) es la única puerta de entrada para hardware, umbrales y baja de un servidor en Postgres. El servidor debe existir ya en la tabla `servidores` (agrégalo primero a `inventario_servidores.yaml` y corre la ingesta una vez — ver paso 5 de arriba); este script no da de alta servidores nuevos, solo administra su hardware/umbrales o lo elimina.
 
 ```bash
-pipenv run python db/eliminar_servidor.py QLYMSPROD02
+pipenv run python db/gestionar_servidor.py hardware DEVELOP   # chasis/CPU/GPU/RAM/discos/RAID (interactivo, Enter conserva el valor actual)
+pipenv run python db/gestionar_servidor.py umbrales DEVELOP   # verde_max/ambar_max por componente (vacio = usa el default generico)
+pipenv run python db/gestionar_servidor.py baja QLYMSPROD02   # elimina TODO lo del servidor en Postgres
 ```
 
-Si no indicas el nombre, te deja elegir entre los servidores existentes (con su conteo de lecturas). Muestra cuántas lecturas y archivos ya ingeridos tiene antes de borrar, pide confirmación explícita (escribir `'si'`), borra en el orden correcto (`archivos_ingeridos` → `lecturas` → `servidores`) y limpia los grupos del árbol que queden vacíos tras el borrado. El script **solo toca Postgres** — recuerda quitar también la entrada de `inventario_servidores.yaml` si es un retiro definitivo.
+Si no indicas el nombre, te deja elegir entre los servidores existentes. `baja` muestra cuántas lecturas y archivos ya ingeridos tiene antes de borrar, pide confirmación explícita (escribir `'si'`), borra en el orden correcto y limpia los grupos del árbol que queden vacíos tras el borrado (hardware/discos/RAID/umbrales se limpian solos vía `ON DELETE CASCADE`). El script **solo toca Postgres** — recuerda quitar también la entrada de `inventario_servidores.yaml` si es un retiro definitivo.
 
 ## Estructura del proyecto
 
@@ -412,9 +414,7 @@ Monit_Servers_V2/
 │   └── relay_entrante/                    ← (gitignored) lecturas recolectadas de los companeros, por nombre
 │
 ├── backend/                               ← API (FastAPI) + sirve el dashboard
-│   ├── main.py
-│   ├── umbrales.yaml                      ← umbrales del semaforo (verde/ambar/rojo), default + overrides por servidor
-│   ├── hardware.yaml                       ← modelo de CPU/GPU y nucleos por servidor (solo informativo, dashboard)
+│   ├── main.py                             ← umbrales/hardware se leen de Postgres, no de archivos
 │   └── config.ini
 │
 ├── dashboard/                             ← Pagina estatica (HTML/CSS/JS), servida por el backend
@@ -422,11 +422,11 @@ Monit_Servers_V2/
 │   └── assets/
 │
 ├── db/
-│   ├── schema.sql
+│   ├── schema.sql                          ← incluye hardware_cpu/gpu/ram, discos, raid, umbrales
 │   ├── migrar_historico_csv.py
 │   ├── respaldar.py
 │   ├── restaurar.py
-│   └── eliminar_servidor.py
+│   └── gestionar_servidor.py               ← hardware / umbrales / baja de un servidor (interactivo)
 │
 ├── bkp/Data_Base/                         ← (gitignored) respaldos .sql generados por respaldar.py
 │

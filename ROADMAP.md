@@ -108,7 +108,7 @@ Módulo en [`ingesta/`](ingesta/): `ingesta.py`, `config.ini` (sin secretos: `ma
 
 ### Implementado y probado ✅ (backend)
 
-Backend en [`backend/`](backend/): `main.py` (FastAPI), `umbrales.yaml` (umbrales del semáforo — **valores provisionales**, ver "Pendiente de decidir"), `config.ini` (host/puerto, por defecto `127.0.0.1:8000`, solo accesible desde esta máquina).
+Backend en [`backend/`](backend/): `main.py` (FastAPI), `config.ini` (host/puerto, por defecto `127.0.0.1:8000`, solo accesible desde esta máquina). Los umbrales del semáforo y el hardware (CPU/GPU/RAM/discos/RAID, informativo) viven en Postgres desde el 2026-10-05 (tablas `umbrales`, `hardware_cpu`, `hardware_gpu`, `hardware_ram`, `discos`, `raid`), administrados con [`db/gestionar_servidor.py`](db/gestionar_servidor.py) — ya no son archivos YAML.
 
 Endpoints, probados contra los datos reales ya cargados de DEVELOP:
 
@@ -344,7 +344,7 @@ El dashboard ya no depende de que haya una terminal abierta corriendo `uvicorn` 
 
 ## Pendiente de decidir
 
-- Valores exactos de los umbrales de temperatura para el semáforo (paso 6, backend) — ya se decidió que viven en un YAML leído por el backend (`backend/umbrales.yaml`); los que hay ahí son provisionales (70/85°C CPU, 75/85°C GPU).
+- ~~Valores exactos de los umbrales de temperatura para el semáforo (paso 6, backend).~~ Resuelto el 2026-10-05 — umbral por servidor en Postgres (tabla `umbrales`), con valores investigados por modelo real de CPU/GPU (Intel ARK, AMD, NVIDIA; algunos estimados por convención de generación donde el fabricante no publica Tjmax exacto por SKU). El default genérico (70/85°C CPU, 75/85°C GPU) se queda como fallback en `backend/main.py` para servidores sin hardware identificado todavía (ej. QLYMSPROD01/02 de AbInBev, sitio offline sin acceso).
 - ~~Detalles de la imagen empresarial Quantum a aplicar (paso 7).~~ Resuelto — colores, logo y tipografía reales ya aplicados en el dashboard (paso 7).
 - **Ambiente conda para `colector_ubuntu`** (paso 1 / instalación): el usuario quiere que la instalación en servidores use un ambiente virtual con conda antes de todo. Pendiente: por qué `conda` no aparece en DEVELOP (`which conda` no encontró nada, ni en rutas comunes) — el usuario lo va a verificar. Una vez resuelto, falta decidir nombre del ambiente y versión de Python, y documentarlo en el README. No bloquea el paso 9 — puede resolverse en paralelo.
 
