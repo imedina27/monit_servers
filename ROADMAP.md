@@ -342,11 +342,28 @@ El dashboard ya no depende de que haya una terminal abierta corriendo `uvicorn` 
 
 - Prueba completa del flujo: colector → ingesta → BD → dashboard, con al menos un servidor Ubuntu y uno Windows reales antes de dar el proyecto por cerrado.
 
+## 16. Uso de disco por volumen/punto de montaje en el dashboard
+
+Mostrar, debajo de la gráfica histórica, el porcentaje de ocupación de cada punto de montaje real del servidor (ej. `/`, `/home`, `/opt`), agrupado por volumen/disco físico — con barra de progreso coloreada igual que el semáforo de temperatura.
+
+**Mock aprobado por el usuario** (datos reales de `DEVELOP`, vía `df -hT`): [ver mock](https://claude.ai/artifact/4LhSCh9NSdffVjNE639qYW)
+
+**Umbrales propuestos** (mismo criterio que el semáforo, a confirmar antes de implementar): verde ≤70%, ámbar 70–90%, rojo >90%.
+
+### Plan de implementación
+
+1. **Tabla nueva en Postgres** (`uso_disco` o similar) — no reutiliza `lecturas`, que es especifica de temperatura (`componente IN ('cpu','gpu')`, columna `temperatura_c`). Columnas: `servidor_id`, `medido_en`, `volumen` (grupo/disco físico), `punto_montaje`, `usado_gb`, `total_gb`. Se guarda como serie de tiempo (igual que las temperaturas) aunque el dashboard solo muestre "lo último" por ahora — deja abierta la puerta a una gráfica histórica de ocupación más adelante.
+2. **Colector** (`colector_ubuntu/monitor.py`): función nueva que lee montajes reales (filtrando `tmpfs`/`overlay`/`devtmpfs`/etc.), parecida en forma a las funciones de CPU/GPU que ya existen. Agrega un archivo nuevo al lote (o un tipo de registro nuevo), no toca la lógica de temperatura.
+3. **Ingesta** (`ingesta/ingesta.py`): parser nuevo para este tipo de dato, replicado en las **tres rutas de carga** que ya existen (online directo, offline manual, relay de gateway) — es la parte que más superficie toca, no solo el colector.
+4. **Backend**: endpoint nuevo (ej. `GET /api/servidores/{nombre}/disco`) que regresa el último snapshot por punto de montaje, con el estado ya resuelto (verde/ámbar/rojo) igual que hace `calcular_estado` para temperatura.
+5. **Dashboard**: sección "Uso de disco" debajo del histórico (ver mock), igual patrón que la ficha técnica de hardware — se omite sola si el servidor no tiene datos todavía.
+
 ## Pendiente de decidir
 
 - ~~Valores exactos de los umbrales de temperatura para el semáforo (paso 6, backend).~~ Resuelto el 2026-10-05 — umbral por servidor en Postgres (tabla `umbrales`), con valores investigados por modelo real de CPU/GPU (Intel ARK, AMD, NVIDIA; algunos estimados por convención de generación donde el fabricante no publica Tjmax exacto por SKU). El default genérico (70/85°C CPU, 75/85°C GPU) se queda como fallback en `backend/main.py` para servidores sin hardware identificado todavía (ej. QLYMSPROD01/02 de AbInBev, sitio offline sin acceso).
 - ~~Detalles de la imagen empresarial Quantum a aplicar (paso 7).~~ Resuelto — colores, logo y tipografía reales ya aplicados en el dashboard (paso 7).
 - **Ambiente conda para `colector_ubuntu`** (paso 1 / instalación): el usuario quiere que la instalación en servidores use un ambiente virtual con conda antes de todo. Pendiente: por qué `conda` no aparece en DEVELOP (`which conda` no encontró nada, ni en rutas comunes) — el usuario lo va a verificar. Una vez resuelto, falta decidir nombre del ambiente y versión de Python, y documentarlo en el README. No bloquea el paso 9 — puede resolverse en paralelo.
+- **Correr `scripts/extraer_hardware.py` (con `sudo`) en todos los servidores monitoreados y cargar los `.json` resultantes con `db/gestionar_servidor.py importar`** (2026-10-06). Pendiente para: completar el detalle de DIMMs y el número de serie de chasis en los servidores donde todavía falta (`MINI_LENOVO`, `quantumdata`, `colima00`, `colima02`, `TAD_18_de_Marzo`), y refrescar/confirmar el resto con una lectura reciente.
 
 ## Mejoras futuras (no bloquean el roadmap)
 
