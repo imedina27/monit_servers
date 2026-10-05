@@ -6,6 +6,19 @@ Sistema centralizado para monitorear temperaturas de CPU/GPU de 15-20 servidores
 
 En construcción. Ver [ROADMAP.md](ROADMAP.md) para el plan de trabajo paso a paso.
 
+## Versionado
+
+Se usa [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`):
+
+- **MAJOR**: cambios grandes de infraestructura (ej. migración a Docker).
+- **MINOR**: funcionalidad nueva (ej. un sitio nuevo con relay, un endpoint nuevo).
+- **PATCH**: fixes sin funcionalidad nueva.
+
+Se sube de versión cada vez que se cierra un paso del [ROADMAP.md](ROADMAP.md) o se
+pone en operación un sitio/cliente nuevo. El detalle legible de cada versión vive en
+[CHANGELOG.md](CHANGELOG.md) (no reemplaza al `git log`, es un resumen orientado a
+quien no siguió el trabajo commit por commit).
+
 ## Contexto / decisiones ya tomadas
 
 - **Escala**: 15-20 servidores, mezcla de Ubuntu y Windows.

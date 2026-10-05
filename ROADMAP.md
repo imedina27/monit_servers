@@ -236,6 +236,15 @@ El dashboard ya no depende de que haya una terminal abierta corriendo `uvicorn` 
 - Documentar la convención elegida en el README.
 - Se hace antes de la migración a Docker (paso 13) a propósito, para que la primera imagen ya nazca con un tag de versión real.
 
+### Implementado ✅ (versionado)
+
+- Esquema elegido: **SemVer** (`vMAJOR.MINOR.PATCH`), documentado en el [README.md](README.md#versionado).
+- Nombre elegido: **`CHANGELOG.md`** (sobre `release_notes.md`) — convención estándar ([Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)), uso interno sin necesidad de tono orientado a marketing.
+- [`CHANGELOG.md`](CHANGELOG.md) creado con la entrada `v1.0.0`, resumiendo todo lo cerrado hasta ahora (pasos 1-11 + relay del paso 14 en AbInBev/Manzanillo).
+- Tag `v1.0.0` creado sobre el commit de este cierre.
+
+**Paso 12 cerrado.**
+
 ## 13. Migrar el stack central (backend + dashboard + ingesta + BD) a DEVELOP, vía Docker
 
 - **Contexto (2026-10-02)**: se decidió, en conjunto con el equipo, que el sistema central (hoy corriendo en la máquina Windows del usuario) se despliega en **DEVELOP** (Ubuntu Server) — uno de los propios servidores monitoreados — para no depender de que la máquina personal esté encendida. El empaquetado se hace con **Docker**.
