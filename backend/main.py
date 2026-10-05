@@ -162,7 +162,7 @@ def hardware_servidor(nombre: str):
         resultado = {}
 
         cur.execute(
-            "SELECT marca, modelo, numero_serie, so_version FROM hardware_chassis WHERE servidor_id = %s",
+            "SELECT marca, modelo, numero_serie, so_version, garantia FROM hardware_chassis WHERE servidor_id = %s",
             (servidor_id,),
         )
         fila = cur.fetchone()
@@ -181,10 +181,17 @@ def hardware_servidor(nombre: str):
             resultado["gpu_modelo"] = fila["modelo"]
             resultado["gpu_nucleos"] = fila["nucleos"]
 
-        cur.execute("SELECT total_gb FROM hardware_ram WHERE servidor_id = %s", (servidor_id,))
+        cur.execute("SELECT total_gb, velocidad_mhz FROM hardware_ram WHERE servidor_id = %s", (servidor_id,))
         fila = cur.fetchone()
         if fila:
             resultado["ram_total_gb"] = fila["total_gb"]
+            resultado["ram_velocidad_mhz"] = fila["velocidad_mhz"]
+
+        cur.execute(
+            "SELECT slot, estado, capacidad_mb, velocidad_mhz FROM hardware_dimms WHERE servidor_id = %s ORDER BY id",
+            (servidor_id,),
+        )
+        resultado["dimms"] = cur.fetchall()
 
         cur.execute(
             "SELECT marca, modelo, tipo, capacidad, transporte FROM discos WHERE servidor_id = %s ORDER BY id",

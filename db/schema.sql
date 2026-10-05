@@ -49,7 +49,8 @@ CREATE TABLE hardware_chassis (
     marca        VARCHAR(50),
     modelo       VARCHAR(100),
     numero_serie VARCHAR(50),
-    so_version   VARCHAR(30)  -- version exacta del SO, ej "Ubuntu 22.04.5 LTS" (sistema_operativo en 'servidores' solo guarda la familia)
+    so_version   VARCHAR(30),  -- version exacta del SO, ej "Ubuntu 22.04.5 LTS" (sistema_operativo en 'servidores' solo guarda la familia)
+    garantia     VARCHAR(50)   -- texto libre: fecha de vencimiento, "NO SUPPORT", "SIN INFORMACION", etc.
 );
 
 CREATE TABLE hardware_cpu (
@@ -65,8 +66,21 @@ CREATE TABLE hardware_gpu (
 );
 
 CREATE TABLE hardware_ram (
-    servidor_id INTEGER PRIMARY KEY REFERENCES servidores(id) ON DELETE CASCADE,
-    total_gb    INTEGER NOT NULL
+    servidor_id   INTEGER PRIMARY KEY REFERENCES servidores(id) ON DELETE CASCADE,
+    total_gb      INTEGER NOT NULL,
+    velocidad_mhz INTEGER
+);
+
+-- Detalle por modulo fisico de RAM -- opcional, solo donde se consiguio
+-- (requiere dmidecode con root, o un inventario fisico externo). Sin esto,
+-- hardware_ram.total_gb sigue siendo suficiente para el dashboard.
+CREATE TABLE hardware_dimms (
+    id            SERIAL PRIMARY KEY,
+    servidor_id   INTEGER NOT NULL REFERENCES servidores(id) ON DELETE CASCADE,
+    slot          VARCHAR(30) NOT NULL,
+    estado        VARCHAR(20),  -- ej "Good", "Degraded", tal cual lo reporta la fuente
+    capacidad_mb  INTEGER NOT NULL,
+    velocidad_mhz INTEGER
 );
 
 -- Un servidor puede tener varios discos (o un solo "volumen logico" si un

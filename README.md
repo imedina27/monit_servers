@@ -275,7 +275,7 @@ Completa ahí los servidores reales (ver paso 5 de la instalación del colector 
 
 #### Paso 5 — (Opcional) Umbrales del semáforo y hardware
 
-Los umbrales de temperatura (verde/ámbar/rojo) y el hardware (chasis, CPU/GPU/RAM/discos/RAID, solo informativo para el dashboard) viven en Postgres, no en archivos — ver "Administrar un servidor" más abajo. Un servidor sin umbral propio usa el default genérico (`UMBRALES_DEFAULT` en `backend/main.py`); un servidor sin hardware cargado simplemente no muestra esa info en el dashboard.
+Los umbrales de temperatura (verde/ámbar/rojo) y el hardware (chasis + garantia, CPU/GPU, RAM total + DIMMs, discos, RAID, solo informativo para el dashboard) viven en Postgres, no en archivos — ver "Administrar un servidor" más abajo. Un servidor sin umbral propio usa el default genérico (`UMBRALES_DEFAULT` en `backend/main.py`); un servidor sin hardware cargado simplemente no muestra esa info en el dashboard.
 
 #### Paso 6 — Levantar el servidor
 

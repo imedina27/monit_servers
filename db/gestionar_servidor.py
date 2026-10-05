@@ -99,7 +99,7 @@ def cmd_hardware(conn, nombre):
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT marca, modelo, numero_serie, so_version FROM hardware_chassis WHERE servidor_id = %s",
+            "SELECT marca, modelo, numero_serie, so_version, garantia FROM hardware_chassis WHERE servidor_id = %s",
             (servidor_id,),
         )
         chasis_actual = cur.fetchone()
@@ -107,8 +107,13 @@ def cmd_hardware(conn, nombre):
         cpu_actual = cur.fetchone()
         cur.execute("SELECT modelo, nucleos FROM hardware_gpu WHERE servidor_id = %s", (servidor_id,))
         gpu_actual = cur.fetchone()
-        cur.execute("SELECT total_gb FROM hardware_ram WHERE servidor_id = %s", (servidor_id,))
+        cur.execute("SELECT total_gb, velocidad_mhz FROM hardware_ram WHERE servidor_id = %s", (servidor_id,))
         ram_actual = cur.fetchone()
+        cur.execute(
+            "SELECT slot, estado, capacidad_mb, velocidad_mhz FROM hardware_dimms WHERE servidor_id = %s ORDER BY id",
+            (servidor_id,),
+        )
+        dimms_actuales = cur.fetchall()
         cur.execute(
             "SELECT marca, modelo, tipo, capacidad, transporte FROM discos WHERE servidor_id = %s ORDER BY id",
             (servidor_id,),
@@ -125,15 +130,17 @@ def cmd_hardware(conn, nombre):
     chasis_modelo = pedir("Modelo", chasis_actual[1] if chasis_actual else None)
     chasis_serie = pedir("Numero de serie", chasis_actual[2] if chasis_actual else None)
     chasis_so = pedir("Version de SO (ej. Ubuntu 22.04.5 LTS)", chasis_actual[3] if chasis_actual else None)
-    if any((chasis_marca, chasis_modelo, chasis_serie, chasis_so)):
+    chasis_garantia = pedir("Garantia (fecha, 'NO SUPPORT', etc.)", chasis_actual[4] if chasis_actual else None)
+    if any((chasis_marca, chasis_modelo, chasis_serie, chasis_so, chasis_garantia)):
         with conn.cursor() as cur:
             cur.execute(
-                """INSERT INTO hardware_chassis (servidor_id, marca, modelo, numero_serie, so_version)
-                   VALUES (%s, %s, %s, %s, %s)
+                """INSERT INTO hardware_chassis (servidor_id, marca, modelo, numero_serie, so_version, garantia)
+                   VALUES (%s, %s, %s, %s, %s, %s)
                    ON CONFLICT (servidor_id) DO UPDATE
                        SET marca = EXCLUDED.marca, modelo = EXCLUDED.modelo,
-                           numero_serie = EXCLUDED.numero_serie, so_version = EXCLUDED.so_version""",
-                (servidor_id, chasis_marca, chasis_modelo, chasis_serie, chasis_so),
+                           numero_serie = EXCLUDED.numero_serie, so_version = EXCLUDED.so_version,
+                           garantia = EXCLUDED.garantia""",
+                (servidor_id, chasis_marca, chasis_modelo, chasis_serie, chasis_so, chasis_garantia),
             )
 
     print("\n-- CPU --")
@@ -166,13 +173,47 @@ def cmd_hardware(conn, nombre):
 
     print("\n-- RAM --")
     ram_gb = pedir_entero("Total de RAM (GB)", ram_actual[0] if ram_actual else None)
+    ram_velocidad = pedir_entero("Velocidad de RAM (MHz)", ram_actual[1] if ram_actual else None)
     if ram_gb is not None:
         with conn.cursor() as cur:
             cur.execute(
-                """INSERT INTO hardware_ram (servidor_id, total_gb) VALUES (%s, %s)
-                   ON CONFLICT (servidor_id) DO UPDATE SET total_gb = EXCLUDED.total_gb""",
-                (servidor_id, ram_gb),
+                """INSERT INTO hardware_ram (servidor_id, total_gb, velocidad_mhz) VALUES (%s, %s, %s)
+                   ON CONFLICT (servidor_id) DO UPDATE
+                       SET total_gb = EXCLUDED.total_gb, velocidad_mhz = EXCLUDED.velocidad_mhz""",
+                (servidor_id, ram_gb, ram_velocidad),
             )
+
+    print("\n-- DIMMs (detalle por modulo fisico, opcional) --")
+    if dimms_actuales:
+        print("  DIMMs actuales:")
+        for d in dimms_actuales:
+            print(f"    - {d[0]}: {d[1] or 's/d'}, {d[2]}MB @ {d[3] or 's/d'}MHz")
+    if pedir("Reemplazar la lista de DIMMs (si/no)", "no") == "si":
+        nuevos_dimms = []
+        print("  Agrega los DIMMs uno por uno. Deja 'slot' en blanco para terminar.")
+        while True:
+            slot = input("  Slot (ej. DIMM01, P1-DIMMC2, blanco para terminar): ").strip()
+            if not slot:
+                break
+            estado = input("    Estado (ej. Good, Degraded, opcional): ").strip() or None
+            capacidad_mb = None
+            while capacidad_mb is None:
+                try:
+                    capacidad_mb = int(input("    Capacidad (MB, ej. 32768): ").strip())
+                except ValueError:
+                    print("    Debe ser un numero entero.")
+            velocidad = input("    Velocidad (MHz, opcional): ").strip()
+            velocidad = int(velocidad) if velocidad else None
+            nuevos_dimms.append((slot, estado, capacidad_mb, velocidad))
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM hardware_dimms WHERE servidor_id = %s", (servidor_id,))
+            for slot, estado, capacidad_mb, velocidad in nuevos_dimms:
+                cur.execute(
+                    """INSERT INTO hardware_dimms (servidor_id, slot, estado, capacidad_mb, velocidad_mhz)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    (servidor_id, slot, estado, capacidad_mb, velocidad),
+                )
+        print(f"  {len(nuevos_dimms)} DIMM(s) guardado(s).")
 
     print("\n-- Discos --")
     if discos_actuales:
