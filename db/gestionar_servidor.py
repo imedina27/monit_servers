@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -9,12 +10,13 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(PROJECT_DIR / ".env")
 
-USO = """Uso: pipenv run python db/gestionar_servidor.py <accion> [nombre]
+USO = """Uso: pipenv run python db/gestionar_servidor.py <accion> [nombre|archivo.json]
 
 Acciones:
-  hardware <nombre>   Da de alta/modifica CPU, GPU, RAM, discos y RAID de un servidor.
-  umbrales <nombre>   Da de alta/modifica los umbrales de temperatura (verde/ambar/rojo).
-  baja <nombre>       Elimina un servidor de Postgres (lecturas, hardware, umbrales, todo).
+  hardware <nombre>     Da de alta/modifica CPU, GPU, RAM, discos y RAID de un servidor (interactivo).
+  umbrales <nombre>     Da de alta/modifica los umbrales de temperatura (verde/ambar/rojo).
+  baja <nombre>         Elimina un servidor de Postgres (lecturas, hardware, umbrales, todo).
+  importar <archivo.json>  Carga el reporte de scripts/extraer_hardware.py (sin preguntar nada).
 
 Si no indicas <nombre>, se te deja elegir entre los servidores existentes.
 El servidor debe existir ya en Postgres (agregalo primero a
@@ -315,6 +317,119 @@ def cmd_umbrales(conn, nombre):
     print(f"\nUmbrales de '{nombre}' guardados.")
 
 
+# ─── Accion: importar ──────────────────────────────────────────────────────
+def cmd_importar(conn, ruta_json):
+    with open(ruta_json, encoding="utf-8") as f:
+        datos = json.load(f)
+
+    hostname = datos["hostname"]
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, nombre FROM servidores WHERE LOWER(nombre) = LOWER(%s)", (hostname,))
+        fila = cur.fetchone()
+    if fila is None:
+        print(f"No existe ningun servidor que coincida con el hostname '{hostname}' (de {ruta_json}).")
+        sys.exit(1)
+    servidor_id, nombre_real = fila
+    print(f"Importando a '{nombre_real}' (id {servidor_id}) desde {ruta_json} ...")
+
+    chasis = datos.get("chasis") or {}
+    cpu = datos.get("cpu") or {}
+    gpu = datos.get("gpu") or []
+    ram = datos.get("ram") or {}
+    discos = datos.get("discos") or []
+    raid_software = datos.get("raid_software") or []
+
+    with conn.cursor() as cur:
+        # Chasis: COALESCE para no pisar con NULL un campo que el .json no
+        # trajo (ej. numero_serie sin root), y 'garantia' nunca la toca este
+        # importador -- el script no puede saberla, es dato administrativo.
+        if any(chasis.get(k) for k in ("marca", "modelo", "numero_serie", "so_version")):
+            cur.execute(
+                """INSERT INTO hardware_chassis (servidor_id, marca, modelo, numero_serie, so_version)
+                   VALUES (%s, %s, %s, %s, %s)
+                   ON CONFLICT (servidor_id) DO UPDATE
+                       SET marca = COALESCE(EXCLUDED.marca, hardware_chassis.marca),
+                           modelo = COALESCE(EXCLUDED.modelo, hardware_chassis.modelo),
+                           numero_serie = COALESCE(EXCLUDED.numero_serie, hardware_chassis.numero_serie),
+                           so_version = COALESCE(EXCLUDED.so_version, hardware_chassis.so_version)""",
+                (servidor_id, chasis.get("marca"), chasis.get("modelo"), chasis.get("numero_serie"), chasis.get("so_version")),
+            )
+            print("  chasis: actualizado")
+
+        if cpu.get("modelo"):
+            cur.execute(
+                """INSERT INTO hardware_cpu (servidor_id, modelo, nucleos) VALUES (%s, %s, %s)
+                   ON CONFLICT (servidor_id) DO UPDATE SET modelo = EXCLUDED.modelo, nucleos = EXCLUDED.nucleos""",
+                (servidor_id, cpu["modelo"], cpu.get("nucleos_totales")),
+            )
+            print("  cpu: actualizado")
+
+        if gpu:
+            modelos = sorted({g["modelo"] for g in gpu})
+            modelo_gpu = f"{len(gpu)}x {modelos[0]}" if len(modelos) == 1 and len(gpu) > 1 else " + ".join(modelos)
+            # Nucleos CUDA: el script no los puede saber (no vienen de nvidia-smi),
+            # se conserva lo que ya hubiera cargado a mano.
+            cur.execute("SELECT nucleos FROM hardware_gpu WHERE servidor_id = %s", (servidor_id,))
+            fila_actual = cur.fetchone()
+            nucleos_actuales = fila_actual[0] if fila_actual else None
+            cur.execute(
+                """INSERT INTO hardware_gpu (servidor_id, modelo, nucleos) VALUES (%s, %s, %s)
+                   ON CONFLICT (servidor_id) DO UPDATE SET modelo = EXCLUDED.modelo""",
+                (servidor_id, modelo_gpu, nucleos_actuales),
+            )
+            print(f"  gpu: actualizado ({modelo_gpu}) -- nucleos CUDA sin tocar")
+
+        if ram.get("total_gb"):
+            cur.execute("SELECT velocidad_mhz FROM hardware_ram WHERE servidor_id = %s", (servidor_id,))
+            fila_actual = cur.fetchone()
+            velocidad = ram.get("velocidad_mhz") or (fila_actual[0] if fila_actual else None)
+            cur.execute(
+                """INSERT INTO hardware_ram (servidor_id, total_gb, velocidad_mhz) VALUES (%s, %s, %s)
+                   ON CONFLICT (servidor_id) DO UPDATE SET total_gb = EXCLUDED.total_gb, velocidad_mhz = EXCLUDED.velocidad_mhz""",
+                (servidor_id, ram["total_gb"], velocidad),
+            )
+            print("  ram: actualizado")
+
+        # DIMMs: solo se tocan si el .json SI trae detalle (corrio como root) --
+        # si no, no se borra el detalle que ya hubiera de otra fuente.
+        if ram.get("dimms"):
+            cur.execute("DELETE FROM hardware_dimms WHERE servidor_id = %s", (servidor_id,))
+            for d in ram["dimms"]:
+                cur.execute(
+                    """INSERT INTO hardware_dimms (servidor_id, slot, estado, capacidad_mb, velocidad_mhz)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    (servidor_id, d["slot"], d.get("estado"), d.get("capacidad_mb"), d.get("velocidad_mhz")),
+                )
+            print(f"  dimms: {len(ram['dimms'])} modulo(s)")
+        else:
+            print("  dimms: el .json no trae detalle (no se corrio como root) -- se deja lo que ya habia")
+
+        if discos:
+            cur.execute("DELETE FROM discos WHERE servidor_id = %s", (servidor_id,))
+            for d in discos:
+                cur.execute(
+                    """INSERT INTO discos (servidor_id, marca, modelo, tipo, capacidad, transporte)
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                    (servidor_id, d.get("marca"), d["modelo"], d["tipo"], d["capacidad"], d.get("transporte")),
+                )
+            print(f"  discos: {len(discos)}")
+
+        # RAID: solo se reemplazan las filas tipo 'software' (lo que este
+        # script si puede confirmar via /proc/mdstat) -- un 'hardware'/
+        # 'desconocido' cargado a mano se queda intacto.
+        if raid_software:
+            cur.execute("DELETE FROM raid WHERE servidor_id = %s AND tipo = 'software'", (servidor_id,))
+            for r in raid_software:
+                cur.execute(
+                    "INSERT INTO raid (servidor_id, tipo, nivel, descripcion) VALUES (%s, %s, %s, %s)",
+                    (servidor_id, r["tipo"], r.get("nivel"), r.get("descripcion")),
+                )
+            print(f"  raid (software): {len(raid_software)} arreglo(s)")
+
+    conn.commit()
+    print(f"\n'{nombre_real}' actualizado desde {ruta_json}.")
+
+
 # ─── Accion: baja ──────────────────────────────────────────────────────────
 def limpiar_grupos_vacios(conn, grupo_id):
     """Sube por el arbol borrando grupos que se quedaron sin servidores ni subgrupos."""
@@ -373,12 +488,21 @@ def cmd_baja(conn, nombre):
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("hardware", "umbrales", "baja"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("hardware", "umbrales", "baja", "importar"):
         print(USO)
         sys.exit(1)
 
     accion = sys.argv[1]
     conn = conectar_db()
+
+    if accion == "importar":
+        if len(sys.argv) < 3:
+            print(USO)
+            sys.exit(1)
+        cmd_importar(conn, sys.argv[2])
+        conn.close()
+        return
+
     nombre = sys.argv[2] if len(sys.argv) > 2 else elegir_servidor(conn)
 
     if accion == "hardware":

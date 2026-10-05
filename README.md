@@ -387,9 +387,22 @@ Si no indicas el archivo, te deja elegir entre los respaldos disponibles en `bkp
 pipenv run python db/gestionar_servidor.py hardware DEVELOP   # chasis/CPU/GPU/RAM/discos/RAID (interactivo, Enter conserva el valor actual)
 pipenv run python db/gestionar_servidor.py umbrales DEVELOP   # verde_max/ambar_max por componente (vacio = usa el default generico)
 pipenv run python db/gestionar_servidor.py baja QLYMSPROD02   # elimina TODO lo del servidor en Postgres
+pipenv run python db/gestionar_servidor.py importar DEVELOP.json  # carga el reporte de scripts/extraer_hardware.py, sin preguntar nada
 ```
 
 Si no indicas el nombre, te deja elegir entre los servidores existentes. `baja` muestra cuántas lecturas y archivos ya ingeridos tiene antes de borrar, pide confirmación explícita (escribir `'si'`), borra en el orden correcto y limpia los grupos del árbol que queden vacíos tras el borrado (hardware/discos/RAID/umbrales se limpian solos vía `ON DELETE CASCADE`). El script **solo toca Postgres** — recuerda quitar también la entrada de `inventario_servidores.yaml` si es un retiro definitivo.
+
+`importar` busca el servidor por hostname (sin distinguir mayúsculas/minúsculas) y solo pisa lo que el `.json` sí trae: si no se corrió como root, `dimms` viene vacío y el importador deja intacto el detalle que ya hubiera de otra fuente (no lo borra). El RAID por hardware (controlador oculta los discos) tampoco lo toca — solo refresca las filas `tipo='software'` que sí puede confirmar vía `/proc/mdstat`.
+
+### Levantar el inventario físico de un servidor (chasis, CPU, RAM+DIMMs, discos)
+
+[`scripts/extraer_hardware.py`](scripts/extraer_hardware.py) se corre **en el servidor Linux** (no en la máquina central) y guarda `<hostname>.json` en el directorio actual — sin instalar nada, sin tocar RAID por hardware:
+
+```bash
+sudo python3 extraer_hardware.py
+```
+
+Sin `sudo` igual corre, pero sin el detalle de DIMMs ni el número de serie del chasis (ambos requieren `dmidecode` con root) — el script avisa claramente cuando pasa esto. Copia el `.json` resultante a la máquina central y cárgalo con `gestionar_servidor.py importar` (arriba).
 
 ## Estructura del proyecto
 
@@ -431,7 +444,8 @@ Monit_Servers_V2/
 ├── bkp/Data_Base/                         ← (gitignored) respaldos .sql generados por respaldar.py
 │
 ├── scripts/
-│   └── instalar_tarea_ingesta.ps1         ← crea la tarea programada de la ingesta
+│   ├── instalar_tarea_ingesta.ps1         ← crea la tarea programada de la ingesta
+│   └── extraer_hardware.py                ← se corre EN el servidor Linux (sudo); genera <hostname>.json
 │
 ├── inventario_servidores.yaml.example     ← plantilla versionada
 ├── inventario_servidores.yaml             ← (gitignored) datos reales de los servidores
