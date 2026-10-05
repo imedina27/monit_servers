@@ -160,17 +160,118 @@ function renderSemaforo(estadoActual) {
     `;
 }
 
+// ─── Ficha tecnica de hardware (chasis, CPU/GPU, RAM+DIMMs, discos, RAID) ──
+// Solo informativo -- no afecta el semaforo. Cada seccion se omite si el
+// servidor no tiene ese dato cargado (ver db/gestionar_servidor.py).
+function construirFichaHardware(hw) {
+    const hayAlgo = hw.chasis || hw.cpu_modelo || hw.gpu_modelo || hw.ram_total_gb
+        || (hw.discos && hw.discos.length > 0) || (hw.raid && hw.raid.length > 0);
+    if (!hayAlgo) {
+        return `<p class="mensaje-vacio">Sin información de hardware registrada.</p>`;
+    }
+
+    const secciones = [];
+
+    if (hw.chasis) {
+        const c = hw.chasis;
+        const garantiaEsAlerta = (c.garantia || "").toUpperCase() === "NO SUPPORT";
+        secciones.push(`
+            <div class="ficha-hardware__seccion">
+                <div class="ficha-hardware__etiqueta">Chasis</div>
+                <div class="ficha-hardware__principal">${[c.marca, c.modelo].filter(Boolean).join(" ") || "—"}</div>
+                <div class="ficha-hardware__secundario">${[c.numero_serie && `Serie ${c.numero_serie}`, c.so_version].filter(Boolean).join(" · ")}</div>
+                ${c.garantia ? `<div class="ficha-hardware__badge${garantiaEsAlerta ? " ficha-hardware__badge--alerta" : ""}">Garantía: ${c.garantia}</div>` : ""}
+            </div>
+        `);
+    }
+
+    if (hw.cpu_modelo || hw.gpu_modelo) {
+        secciones.push(`
+            <div class="ficha-hardware__seccion ficha-hardware__seccion--compacta">
+                ${hw.cpu_modelo ? `
+                    <div>
+                        <div class="ficha-hardware__etiqueta">CPU</div>
+                        <div>${hw.cpu_modelo}${hw.cpu_nucleos ? ` <span class="ficha-hardware__secundario">· ${hw.cpu_nucleos} núcleos</span>` : ""}</div>
+                    </div>
+                ` : ""}
+                ${hw.gpu_modelo ? `
+                    <div>
+                        <div class="ficha-hardware__etiqueta">GPU</div>
+                        <div>${hw.gpu_modelo}${hw.gpu_nucleos ? ` <span class="ficha-hardware__secundario">· ${hw.gpu_nucleos} núcleos</span>` : ""}</div>
+                    </div>
+                ` : ""}
+            </div>
+        `);
+    }
+
+    if (hw.ram_total_gb) {
+        const dimms = hw.dimms || [];
+        secciones.push(`
+            <div class="ficha-hardware__seccion">
+                <div class="ficha-hardware__fila-titulo">
+                    <div class="ficha-hardware__etiqueta">Memoria (RAM)</div>
+                    <div class="ficha-hardware__principal">${hw.ram_total_gb} GB${hw.ram_velocidad_mhz ? ` <span class="ficha-hardware__secundario">@ ${hw.ram_velocidad_mhz} MHz</span>` : ""}</div>
+                </div>
+                ${dimms.length > 0 ? `
+                    <table class="ficha-hardware__tabla">
+                        <thead><tr><th>Slot</th><th>Estado</th><th>Cap.</th></tr></thead>
+                        <tbody>
+                            ${dimms.map(d => `
+                                <tr>
+                                    <td>${d.slot}</td>
+                                    <td><span class="punto-estado" data-estado="${(d.estado || "").toLowerCase() === "good" ? "verde" : "ambar"}"></span>${d.estado || "s/d"}</td>
+                                    <td>${Math.round(d.capacidad_mb / 1024)} GB</td>
+                                </tr>
+                            `).join("")}
+                        </tbody>
+                    </table>
+                ` : ""}
+            </div>
+        `);
+    }
+
+    if (hw.discos && hw.discos.length > 0) {
+        secciones.push(`
+            <div class="ficha-hardware__seccion">
+                <div class="ficha-hardware__etiqueta">Almacenamiento</div>
+                ${hw.discos.map(d => `
+                    <div class="ficha-hardware__fila-titulo">
+                        <div>${[d.marca, d.modelo].filter(Boolean).join(" ")} <span class="ficha-hardware__secundario">(${[d.tipo.toUpperCase(), d.transporte].filter(Boolean).join(", ")})</span></div>
+                        <div class="ficha-hardware__secundario">${d.capacidad}</div>
+                    </div>
+                `).join("")}
+            </div>
+        `);
+    }
+
+    if (hw.raid && hw.raid.length > 0) {
+        secciones.push(`
+            <div class="ficha-hardware__seccion">
+                <div class="ficha-hardware__etiqueta">RAID</div>
+                ${hw.raid.map(r => `
+                    <div class="ficha-hardware__secundario">${r.nivel || r.tipo}${r.nivel ? ` (${r.tipo})` : ""}${r.descripcion ? ` — ${r.descripcion}` : ""}</div>
+                `).join("")}
+            </div>
+        `);
+    }
+
+    return `<div class="ficha-hardware">${secciones.join(`<div class="ficha-hardware__divisor"></div>`)}</div>`;
+}
+
 // ─── Estado actual (tarjetas + tabla) ──────────────────────────────────────
 async function cargarActual() {
     if (!estado.servidor) return;
     const contenedorTarjetas = document.getElementById("tarjetas");
     const cuerpoTabla = document.getElementById("tabla-sensores");
+    const contenedorHardware = document.getElementById("hardware-contenido");
 
     try {
         const [lecturas, hardware] = await Promise.all([
             obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/actual`),
             obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/hardware`),
         ]);
+
+        contenedorHardware.innerHTML = construirFichaHardware(hardware);
 
         if (lecturas.length === 0) {
             contenedorTarjetas.innerHTML = `<p class="mensaje-vacio">Sin lecturas todavía para este servidor.</p>`;
@@ -227,6 +328,7 @@ async function cargarActual() {
         `).join("");
     } catch (e) {
         contenedorTarjetas.innerHTML = `<p class="mensaje-vacio">Error al cargar el estado actual.</p>`;
+        contenedorHardware.innerHTML = "";
         console.error(e);
     }
 }
@@ -566,27 +668,32 @@ function activarTooltip(svg, series, periodosUnicos, x, y, margen, anchoUtil, ag
     svg.onmouseleave = () => { tooltip.style.display = "none"; };
 }
 
-// ─── Columna reservada (pantallas grandes): mueve "todos los sensores" ahi ──
-// En pantallas chicas/normales, #bloque-sensores vive colapsado dentro de
-// <main> (su posicion original en el HTML). En pantallas >=1800px, se mueve
-// a la columna reservada izquierda y se deja siempre abierto. Reacciona en
-// vivo si la ventana cruza el umbral (no solo al cargar la pagina).
+// ─── Columna reservada (pantallas grandes): mueve "todos los sensores" y la
+// ficha de hardware ahi ───────────────────────────────────────────────────
+// En pantallas chicas/normales, #bloque-sensores y #bloque-hardware viven en
+// <main> (su posicion original en el HTML, el segundo siempre visible). En
+// pantallas >=1800px, ambos se mueven a la columna reservada izquierda, en
+// ese orden, y #bloque-sensores se deja siempre abierto. Reacciona en vivo
+// si la ventana cruza el umbral (no solo al cargar la pagina).
 function initColumnaReservada() {
-    const bloque = document.getElementById("bloque-sensores");
+    const bloqueSensores = document.getElementById("bloque-sensores");
+    const bloqueHardware = document.getElementById("bloque-hardware");
     const reservado = document.getElementById("reservado");
     const hogarOriginal = document.getElementById("seccion-actual");
-    const resumen = bloque.querySelector("summary");
+    const resumen = bloqueSensores.querySelector("summary");
     const mq = window.matchMedia("(min-width: 1800px)");
 
     function mover() {
         if (mq.matches) {
-            bloque.open = true;
+            bloqueSensores.open = true;
             resumen.textContent = "Todos los sensores";
-            reservado.appendChild(bloque);
+            reservado.appendChild(bloqueSensores);
+            reservado.appendChild(bloqueHardware);
         } else {
-            bloque.open = false;
+            bloqueSensores.open = false;
             resumen.textContent = "Ver todos los sensores";
-            hogarOriginal.appendChild(bloque);
+            hogarOriginal.appendChild(bloqueSensores);
+            hogarOriginal.appendChild(bloqueHardware);
         }
     }
 

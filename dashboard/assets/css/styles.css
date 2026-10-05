@@ -419,6 +419,87 @@ th {
 }
 
 /* ============================================================
+   Ficha tecnica de hardware (chasis, CPU/GPU, RAM+DIMMs, discos, RAID)
+   ============================================================ */
+.ficha-hardware {
+    background-color: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 18px;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ficha-hardware__divisor {
+    height: 1px;
+    background-color: var(--borde);
+}
+
+.ficha-hardware__etiqueta {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--texto-secundario);
+    margin-bottom: 4px;
+}
+
+.ficha-hardware__principal {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.ficha-hardware__secundario {
+    color: var(--texto-secundario);
+    font-size: 12.5px;
+}
+
+.ficha-hardware__fila-titulo {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.ficha-hardware__seccion--compacta {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ficha-hardware__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    background-color: var(--superficie-2);
+    color: var(--texto-secundario);
+}
+.ficha-hardware__badge--alerta {
+    background-color: rgba(224, 144, 46, 0.15);
+    color: var(--ambar);
+}
+
+.ficha-hardware__tabla {
+    margin-top: 8px;
+    font-size: 12px;
+}
+.ficha-hardware__tabla th,
+.ficha-hardware__tabla td {
+    padding: 5px 6px;
+}
+.ficha-hardware__tabla td:last-child,
+.ficha-hardware__tabla th:last-child {
+    text-align: right;
+}
+
+/* ============================================================
    Historico / grafica
    ============================================================ */
 .historico__controles {
