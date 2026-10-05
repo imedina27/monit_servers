@@ -273,7 +273,9 @@ Completa ahí los servidores reales (ver paso 5 de la instalación del colector 
 
 #### Paso 5 — (Opcional) Ajustar los umbrales del semáforo
 
-Edita [`backend/umbrales.yaml`](backend/umbrales.yaml) si los valores provisionales de temperatura (verde/ámbar/rojo) no son los que necesitas.
+Edita [`backend/umbrales.yaml`](backend/umbrales.yaml) si los valores provisionales de temperatura (verde/ámbar/rojo) no son los que necesitas. El bloque `default` aplica a todos los servidores; para uno en particular (hardware conocido) puedes agregar un override bajo `por_servidor.<nombre>` (debe coincidir con el `nombre` en `inventario_servidores.yaml`).
+
+Opcionalmente, edita [`backend/hardware.yaml`](backend/hardware.yaml) para que las tarjetas de "Estado actual" del dashboard muestren el modelo de CPU/GPU y su número de núcleos en vez del nombre crudo del sensor (ej. "Intel Xeon E5-2630 v4 (10 cores)" en vez de "Core_0"). Es solo informativo — no afecta el semáforo.
 
 #### Paso 6 — Levantar el servidor
 
@@ -411,7 +413,8 @@ Monit_Servers_V2/
 │
 ├── backend/                               ← API (FastAPI) + sirve el dashboard
 │   ├── main.py
-│   ├── umbrales.yaml                      ← umbrales del semaforo (verde/ambar/rojo)
+│   ├── umbrales.yaml                      ← umbrales del semaforo (verde/ambar/rojo), default + overrides por servidor
+│   ├── hardware.yaml                       ← modelo de CPU/GPU y nucleos por servidor (solo informativo, dashboard)
 │   └── config.ini
 │
 ├── dashboard/                             ← Pagina estatica (HTML/CSS/JS), servida por el backend

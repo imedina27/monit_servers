@@ -21,6 +21,9 @@ sys.path.insert(0, str(PROJECT_DIR / "ingesta"))
 with open(BASE_DIR / "umbrales.yaml", encoding="utf-8") as f:
     UMBRALES = yaml.safe_load(f)
 
+with open(BASE_DIR / "hardware.yaml", encoding="utf-8") as f:
+    HARDWARE = yaml.safe_load(f) or {}
+
 app = FastAPI(title="Monit Servers V2 - API")
 
 
@@ -34,8 +37,10 @@ def conectar_db():
     )
 
 
-def calcular_estado(componente, temperatura_c):
-    rangos = UMBRALES.get(componente)
+def calcular_estado(nombre_servidor, componente, temperatura_c):
+    rangos = UMBRALES["por_servidor"].get(nombre_servidor, {}).get(componente)
+    if rangos is None:
+        rangos = UMBRALES["default"].get(componente)
     if rangos is None:
         return None
     if temperatura_c <= rangos["verde_max"]:
@@ -135,8 +140,13 @@ def temperatura_actual(nombre: str):
         filas = cur.fetchall()
 
     for fila in filas:
-        fila["estado"] = calcular_estado(fila["componente"], float(fila["temperatura_c"]))
+        fila["estado"] = calcular_estado(nombre, fila["componente"], float(fila["temperatura_c"]))
     return filas
+
+
+@app.get("/api/servidores/{nombre}/hardware")
+def hardware_servidor(nombre: str):
+    return HARDWARE.get(nombre, {})
 
 
 @app.get("/api/servidores/{nombre}/historico")

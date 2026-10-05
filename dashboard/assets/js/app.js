@@ -167,7 +167,10 @@ async function cargarActual() {
     const cuerpoTabla = document.getElementById("tabla-sensores");
 
     try {
-        const lecturas = await obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/actual`);
+        const [lecturas, hardware] = await Promise.all([
+            obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/actual`),
+            obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/hardware`),
+        ]);
 
         if (lecturas.length === 0) {
             contenedorTarjetas.innerHTML = `<p class="mensaje-vacio">Sin lecturas todavía para este servidor.</p>`;
@@ -179,6 +182,15 @@ async function cargarActual() {
         const cpu = lecturas.filter(l => l.componente === "cpu");
         const gpus = lecturas.filter(l => l.componente === "gpu").sort((a, b) => a.sensor.localeCompare(b.sensor));
 
+        // Subtitulo: modelo de hardware + nucleos si estan en hardware.yaml,
+        // si no cae de vuelta al nombre crudo del sensor (comportamiento de siempre).
+        const subtituloCpu = hardware.cpu_modelo
+            ? `${hardware.cpu_modelo}${hardware.cpu_nucleos ? ` (${hardware.cpu_nucleos} cores)` : ""}`
+            : null;
+        const subtituloGpu = hardware.gpu_modelo
+            ? `${hardware.gpu_modelo}${hardware.gpu_nucleos ? ` (${hardware.gpu_nucleos} cores)` : ""}`
+            : null;
+
         // Mismo orden/paleta que la grafica (construirSeries): CPU siempre
         // --serie-1, GPUs en orden alfabetico sobre --serie-2/--serie-3/--serie-1,
         // asi la franja de color de la tarjeta coincide con la linea de la grafica.
@@ -187,10 +199,10 @@ async function cargarActual() {
         const tarjetas = [];
         if (cpu.length > 0) {
             const peor = cpu.reduce((max, l) => (l.temperatura_c > max.temperatura_c ? l : max), cpu[0]);
-            tarjetas.push({ titulo: "CPU (máx.)", sensor: peor.sensor, ...peor, color: cssVar("--serie-1") });
+            tarjetas.push({ titulo: "CPU (máx.)", ...peor, sensor: subtituloCpu || peor.sensor, color: cssVar("--serie-1") });
         }
         gpus.forEach((g, i) => {
-            tarjetas.push({ titulo: g.sensor.replace("_", " "), sensor: g.sensor, ...g, color: cssVar(coloresGpu[i % coloresGpu.length]) });
+            tarjetas.push({ titulo: g.sensor.replace("_", " "), ...g, sensor: subtituloGpu || g.sensor, color: cssVar(coloresGpu[i % coloresGpu.length]) });
         });
 
         contenedorTarjetas.innerHTML = tarjetas.map(t => `
