@@ -136,9 +136,11 @@ Igual que "Colector Ubuntu" arriba (pasos 1-4), en cada servidor compañero del 
 Requisitos: a diferencia del colector (stdlib puro), `relay.py` necesita `paramiko`/`pyyaml`:
 
 ```bash
-python3 -c "import paramiko, yaml" || pip3 install paramiko pyyaml
+python3 -c "import paramiko, yaml" || sudo apt install python3-paramiko python3-yaml
 ```
 
+> ⚠️ En Ubuntu 23.04+/Debian 12+, `pip3 install paramiko pyyaml` falla con `error: externally-managed-environment` (PEP 668). Usa el paquete de `apt` de arriba — instala directo en el Python del sistema, el mismo que usa `ExecStart=/usr/bin/python3`, sin tocar nada más. Si el paquete de `apt` no alcanza (versión vieja), la alternativa es `pip3 install --break-system-packages paramiko pyyaml`, o un venv dedicado apuntando `ExecStart` a `<venv>/bin/python3`.
+>
 > ⚠️ Si el servidor usa **conda**, verifica que el `python3` que vas a poner en `ExecStart` del `.service` sea el mismo donde quedaron instalados esos paquetes (`<python3_elegido> -c "import paramiko, yaml"`) — si conda estaba activo cuando corriste el `pip install`, pueden haber quedado invisibles para `/usr/bin/python3` del sistema. Ajusta `ExecStart` al Python de conda si hace falta.
 
 Copia la carpeta [`relay/`](relay/) (`relay.py`, `config.ini`, `monit_servers_v2_relay.service`) al hub, por ejemplo a `/home/quantum/monit_servers_v2/relay/`.
