@@ -207,6 +207,13 @@ El dashboard ya no depende de que haya una terminal abierta corriendo `uvicorn` 
 - Con el colector ya corriendo solo (paso 9, no disparado a mano), confirmar que el ciclo completo sigue funcionando end-to-end con datos que llegan por su cuenta: colector → archivo → ingesta online → botón "Actualizar" → dashboard.
 - Objetivo: validar el comportamiento real a lo largo del tiempo (varios intervalos, varios archivos) antes de mover nada de infraestructura.
 
+### Probado ✅ (varios días corridos, sin intervención manual)
+
+- `ingesta.log` muestra cargas consecutivas de **DEVELOP** (cada hora, 13 lecturas) y **MINI_LENOVO** (cada hora, 8 lecturas) desde 2026-10-01 hasta la fecha, sin huecos ni errores — el colector (paso 9) generó los archivos solo, por su cuenta, y el ciclo de ingesta (botón "Actualizar"/tarea programada) los cargó a Postgres sin que nadie los disparara a mano archivo por archivo.
+- Confirmado también visualmente: el dashboard muestra lecturas del día de hoy para ambos servidores.
+
+**Paso 10 cerrado.**
+
 ## 11. Instalar el colector en un servidor offline de prueba y validar la carga offline
 
 - Desplegar `colector_ubuntu` en un servidor de prueba sin conexión directa a la máquina central, generar lecturas reales, copiarlas manualmente a `ingesta/pendientes_offline/<nombre_servidor>/` y confirmar que el flujo de carga offline ya existente (paso 5) las procesa correctamente de punta a punta — no solo en teoría.
