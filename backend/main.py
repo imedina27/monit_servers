@@ -24,6 +24,10 @@ UMBRALES_DEFAULT = {
     "gpu": {"verde_max": 75, "ambar_max": 85},
 }
 
+# Umbral de ocupacion de disco (%) -- igual para todos los servidores, no
+# hay override por servidor como en CPU/GPU (no se ha pedido esa necesidad).
+UMBRAL_DISCO = {"verde_max": 70, "ambar_max": 90}
+
 app = FastAPI(title="Monit Servers V2 - API")
 
 
@@ -206,6 +210,45 @@ def hardware_servidor(nombre: str):
         resultado["raid"] = cur.fetchall()
 
     return resultado
+
+
+@app.get("/api/servidores/{nombre}/disco/historico")
+def uso_disco_historico(nombre: str, agrupacion: str = Query("dia", pattern="^(hora|dia|mes)$")):
+    """
+    Un snapshot por periodo (hora/dia/mes) -- la ultima lectura de cada punto
+    de montaje dentro de ese periodo, hasta 1 año atras. El dashboard pide
+    esto una sola vez por agrupacion y el slider de fecha solo indexa el
+    arreglo ya descargado (sin pedir de nuevo en cada arrastre).
+    """
+    unidad_sql = {"hora": "hour", "dia": "day", "mes": "month"}[agrupacion]
+
+    with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        servidor_id = obtener_servidor_id(cur, nombre)
+        cur.execute(
+            """
+            SELECT DISTINCT ON (punto_montaje, periodo)
+                date_trunc(%s, medido_en) AS periodo,
+                volumen, punto_montaje, usado_gb, total_gb
+            FROM uso_disco
+            WHERE servidor_id = %s AND medido_en >= now() - interval '1 year'
+            ORDER BY punto_montaje, periodo, medido_en DESC
+            """,
+            (unidad_sql, servidor_id),
+        )
+        filas = cur.fetchall()
+
+    por_periodo = {}
+    for fila in filas:
+        porcentaje = float(fila["usado_gb"]) / float(fila["total_gb"]) * 100 if fila["total_gb"] else 0
+        fila["porcentaje"] = round(porcentaje, 1)
+        fila["estado"] = calcular_estado(UMBRAL_DISCO, porcentaje)
+        por_periodo.setdefault(fila["periodo"], []).append(fila)
+        del fila["periodo"]
+
+    return [
+        {"periodo": periodo.isoformat(), "montajes": montajes}
+        for periodo, montajes in sorted(por_periodo.items())
+    ]
 
 
 @app.get("/api/servidores/{nombre}/historico")

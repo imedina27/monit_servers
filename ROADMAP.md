@@ -342,7 +342,7 @@ El dashboard ya no depende de que haya una terminal abierta corriendo `uvicorn` 
 
 - Prueba completa del flujo: colector → ingesta → BD → dashboard, con al menos un servidor Ubuntu y uno Windows reales antes de dar el proyecto por cerrado.
 
-## 16. Uso de disco por volumen/punto de montaje en el dashboard
+## 16. Uso de disco por volumen/punto de montaje en el dashboard ✅
 
 Mostrar, debajo de la gráfica histórica, el porcentaje de ocupación de cada punto de montaje real del servidor (ej. `/`, `/home`, `/opt`), agrupado por volumen/disco físico — con barra de progreso coloreada igual que el semáforo de temperatura.
 
@@ -357,6 +357,16 @@ Mostrar, debajo de la gráfica histórica, el porcentaje de ocupación de cada p
 3. **Ingesta** (`ingesta/ingesta.py`): parser nuevo para este tipo de dato, replicado en las **tres rutas de carga** que ya existen (online directo, offline manual, relay de gateway) — es la parte que más superficie toca, no solo el colector.
 4. **Backend**: endpoint nuevo (ej. `GET /api/servidores/{nombre}/disco`) que regresa el último snapshot por punto de montaje, con el estado ya resuelto (verde/ámbar/rojo) igual que hace `calcular_estado` para temperatura.
 5. **Dashboard**: sección "Uso de disco" debajo del histórico (ver mock), igual patrón que la ficha técnica de hardware — se omite sola si el servidor no tiene datos todavía.
+
+### Implementado y probado ✅ (2026-10-06)
+
+Los 5 puntos de arriba, probados de punta a punta contra `DEVELOP` real (colector → `disco_*.csv` → ingesta → `uso_disco` → `/api/servidores/{nombre}/disco` → dashboard). El relay no necesitó ningún cambio — solo mueve archivos `.csv` sin leer su contenido, el parseo por tipo de archivo (`lecturas_`/`disco_`) pasa después en `procesar_online`/`procesar_offline`.
+
+Un detalle que salió al hacerlo: LVM complica el "volumen" — `lsblk` no resuelve el disco físico detrás de un volumen lógico directamente, así que para un device-mapper se usa el nombre del grupo de volúmenes (VG), parseado del propio nombre del dispositivo (`/dev/mapper/ubuntu--vg-home` → `ubuntu-vg`). Para cualquier otro dispositivo se usa tal cual (ej. `/dev/sdb1`). El filtro de montajes usa una lista blanca de sistemas de archivos reales (ext4/xfs/btrfs/etc.) en vez de intentar excluir cada pseudo-filesystem — se encontraron `bpf` y `nsfs` (namespaces de red de Docker) que un filtro por nombre no hubiera cachado.
+
+Umbrales confirmados: verde ≤70%, ámbar 70–90%, rojo >90% (`UMBRAL_DISCO` en `backend/main.py`, igual para todos los servidores, sin override por servidor).
+
+**Paso 16 cerrado.**
 
 ## Pendiente de decidir
 

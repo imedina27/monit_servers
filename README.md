@@ -277,6 +277,8 @@ Completa ahí los servidores reales (ver paso 5 de la instalación del colector 
 
 Los umbrales de temperatura (verde/ámbar/rojo) y el hardware (chasis + garantia, CPU/GPU, RAM total + DIMMs, discos, RAID, solo informativo para el dashboard) viven en Postgres, no en archivos — ver "Administrar un servidor" más abajo. Un servidor sin umbral propio usa el default genérico (`UMBRALES_DEFAULT` en `backend/main.py`); un servidor sin hardware cargado simplemente no muestra esa info en el dashboard.
 
+El dashboard también muestra el **uso de disco** por punto de montaje (ej. `/`, `/home`), agrupado por volumen/disco físico, con el mismo semáforo verde/ámbar/rojo (`UMBRAL_DISCO` en `backend/main.py`, 70%/90%, igual para todos los servidores). El colector lo lee de `/proc/mounts` (filtrando `tmpfs`/`overlay`/etc. con una lista blanca de sistemas de archivos reales) y lo guarda en un archivo `disco_<fecha>.csv` aparte de `lecturas_<fecha>.csv` — la ingesta distingue el tipo de archivo por su nombre y carga a la tabla `uso_disco` (serie de tiempo, aunque el dashboard solo muestra el último valor).
+
 #### Paso 6 — Levantar el servidor
 
 ```bash
@@ -435,7 +437,7 @@ Monit_Servers_V2/
 │   └── assets/
 │
 ├── db/
-│   ├── schema.sql                          ← incluye hardware_cpu/gpu/ram, discos, raid, umbrales
+│   ├── schema.sql                          ← incluye hardware_cpu/gpu/ram, discos, raid, umbrales, uso_disco
 │   ├── migrar_historico_csv.py
 │   ├── respaldar.py
 │   ├── restaurar.py

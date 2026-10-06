@@ -500,6 +500,109 @@ th {
 }
 
 /* ============================================================
+   Uso de disco (barras por punto de montaje)
+   ============================================================ */
+.disco-barra__fila {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+
+.disco-barra__porcentaje {
+    font-weight: 700;
+}
+.disco-barra__porcentaje[data-estado="verde"] { color: var(--verde); }
+.disco-barra__porcentaje[data-estado="ambar"] { color: var(--ambar); }
+.disco-barra__porcentaje[data-estado="rojo"]  { color: var(--rojo); }
+
+.disco-barra {
+    height: 8px;
+    background-color: var(--superficie-2);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.disco-barra__relleno {
+    height: 100%;
+    border-radius: 4px;
+}
+.disco-barra__relleno[data-estado="verde"] { background-color: var(--verde); }
+.disco-barra__relleno[data-estado="ambar"] { background-color: var(--ambar); }
+.disco-barra__relleno[data-estado="rojo"]  { background-color: var(--rojo); }
+
+/* ============================================================
+   Slider de fecha para "Uso de disco" (reutiliza la agrupacion
+   hora/dia/mes de los chips del historico de temperatura)
+   ============================================================ */
+.disco-slider {
+    margin-top: 14px;
+}
+
+.disco-slider__fechas {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+}
+.disco-slider__fechas #disco-fecha-inicio,
+.disco-slider__fechas #disco-fecha-fin {
+    font-size: 12px;
+    color: var(--texto-secundario);
+}
+.disco-slider__fechas #disco-fecha-actual {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--texto);
+}
+
+.disco-slider__ayuda {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--texto-secundario);
+    text-align: center;
+}
+
+#disco-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--borde);
+    outline: none;
+}
+#disco-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--acento);
+    border: 3px solid var(--fondo);
+    box-shadow: 0 0 0 1px var(--acento);
+    cursor: pointer;
+    margin-top: -7px;
+}
+#disco-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--acento);
+    border: 3px solid var(--fondo);
+    cursor: pointer;
+}
+#disco-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+}
+#disco-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--borde);
+}
+
+/* ============================================================
    Historico / grafica
    ============================================================ */
 .historico__controles {

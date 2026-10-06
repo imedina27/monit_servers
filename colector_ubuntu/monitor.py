@@ -1,5 +1,7 @@
 import csv
 import os
+import re
+import shutil
 import time
 import configparser
 import logging
@@ -156,6 +158,85 @@ def parsear_gpu(salida_nvidia):
             pass
     return gpus
 
+# ─── Leer uso de disco por punto de montaje ──────────────────────────────────
+# Lista blanca de sistemas de archivos reales en vez de tratar de excluir cada
+# pseudo-filesystem que existe (tmpfs, overlay, bpf, nsfs de Docker, etc. --
+# la lista de esos nunca se termina de completar).
+FILESYSTEMS_REALES = {"ext2", "ext3", "ext4", "xfs", "btrfs", "ntfs", "vfat", "exfat", "zfs", "reiserfs", "jfs", "f2fs"}
+
+
+def parsear_volumen(dispositivo):
+    """
+    Agrupa por volumen: para un device-mapper de LVM, el grupo de volumenes
+    (VG); para cualquier otro dispositivo, tal cual (ej. "/dev/sda2").
+    LVM escapa un "-" literal del nombre como "--" -- el primer "-" sin
+    escapar separa VG de LV (ver "man 7 lvm", seccion de nombres de dispositivo).
+    """
+    if dispositivo.startswith("/dev/mapper/"):
+        nombre_mapper = dispositivo[len("/dev/mapper/"):]
+        partes = re.split(r"(?<!-)-(?!-)", nombre_mapper)
+        return partes[0].replace("--", "-")
+    return dispositivo
+
+
+def leer_uso_disco():
+    """
+    Lee /proc/mounts y regresa el uso de cada punto de montaje real.
+    """
+    usos = []
+    try:
+        with open("/proc/mounts") as f:
+            lineas = f.readlines()
+    except Exception as e:
+        logging.warning(f"No se pudo leer /proc/mounts: {e}")
+        return usos
+
+    for linea in lineas:
+        campos = linea.split()
+        if len(campos) < 3:
+            continue
+        dispositivo, punto_montaje, tipo_fs = campos[0], campos[1], campos[2]
+        if tipo_fs not in FILESYSTEMS_REALES:
+            continue
+        try:
+            total, usado, _libre = shutil.disk_usage(punto_montaje)
+        except OSError as e:
+            logging.warning(f"No se pudo leer uso de {punto_montaje}: {e}")
+            continue
+        usos.append({
+            "volumen": parsear_volumen(dispositivo),
+            "punto_montaje": punto_montaje,
+            "usado_gb": round(usado / 1024 ** 3, 1),
+            "total_gb": round(total / 1024 ** 3, 1),
+        })
+    return usos
+
+
+# ─── Guardar un lote de uso de disco ──────────────────────────────────────────
+def guardar_lote_disco(directorio_salida, momento, datos_disco):
+    """
+    Un archivo por lote, igual que guardar_lote() -- "disco_<momento>.csv" en
+    vez de "lecturas_<momento>.csv", asi la ingesta distingue el tipo de dato
+    por el nombre del archivo.
+    """
+    if not datos_disco:
+        return
+
+    os.makedirs(directorio_salida, exist_ok=True)
+
+    nombre_archivo = f"disco_{momento.strftime('%Y%m%d_%H%M%S')}.csv"
+    ruta_archivo = os.path.join(directorio_salida, nombre_archivo)
+    medido_en = momento.isoformat()
+
+    with open(ruta_archivo, mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["medido_en", "volumen", "punto_montaje", "usado_gb", "total_gb"])
+        writer.writeheader()
+        for dato in datos_disco:
+            writer.writerow({"medido_en": medido_en, **dato})
+
+    logging.info(f"Lote de disco guardado: {ruta_archivo} ({len(datos_disco)} montajes)")
+
+
 # ─── Guardar un lote de lecturas (formato largo) ──────────────────────────────
 def guardar_lote(directorio_salida, momento, datos_cpu, datos_gpu):
     """
@@ -229,6 +310,12 @@ def main():
                 logging.warning("No se obtuvieron temperaturas en esta lectura.")
             else:
                 guardar_lote(directorio_salida, momento, datos_cpu, datos_gpu)
+
+            datos_disco = leer_uso_disco()
+            if not datos_disco:
+                logging.warning("No se obtuvo uso de disco en esta lectura.")
+            else:
+                guardar_lote_disco(directorio_salida, momento, datos_disco)
 
         except Exception as e:
             logging.error(f"Error durante la lectura: {e}")

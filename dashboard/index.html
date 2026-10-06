@@ -74,6 +74,22 @@
                 </div>
             </div>
         </section>
+
+        <!-- Uso de disco por punto de montaje (ultimo valor, no historico).
+             Se omite sola si el servidor no tiene datos todavia. -->
+        <section id="seccion-disco">
+            <h2>Uso de disco</h2>
+            <div id="disco-contenido"></div>
+            <div id="disco-slider-contenedor" class="disco-slider" hidden>
+                <div class="disco-slider__fechas">
+                    <span id="disco-fecha-inicio"></span>
+                    <span id="disco-fecha-actual"></span>
+                    <span id="disco-fecha-fin"></span>
+                </div>
+                <input type="range" id="disco-slider" min="0" max="0" value="0" step="1">
+                <div class="disco-slider__ayuda">Arrastra para ver el uso de disco en otra fecha (usa la misma agrupación de arriba: por hora/día/mes)</div>
+            </div>
+        </section>
     </main>
 
     <aside id="arbol-servidores" class="arbol" aria-label="Servidores">

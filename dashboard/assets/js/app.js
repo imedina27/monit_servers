@@ -22,6 +22,8 @@ const estado = {
     rangoDatos: null,      // {inicio, fin} en ms: todo el historico disponible para servidor+agrupacion actuales
     ventanaMs: null,       // ancho de la ventana visible actual, en ms
     finVentana: null,      // extremo derecho (mas reciente) de la ventana visible, en ms
+    discoHistorico: null,  // [{periodo, montajes}], ya ordenado por fecha -- el slider solo indexa esto
+    discoIndice: 0,        // posicion actual del slider dentro de discoHistorico
 };
 
 // ─── Tema (claro/oscuro) ───────────────────────────────────────────────────
@@ -102,6 +104,7 @@ function seleccionarServidor(nombre) {
     document.querySelector(`.arbol-servidor[data-nombre="${CSS.escape(nombre)}"]`)?.classList.add("seleccionado");
     cargarActual();
     cargarHistorico();
+    cargarUsoDiscoHistorico();
 }
 
 // Pinta el arbol. Se llama tanto al cargar la pagina como al presionar
@@ -258,6 +261,98 @@ function construirFichaHardware(hw) {
     return `<div class="ficha-hardware">${secciones.join(`<div class="ficha-hardware__divisor"></div>`)}</div>`;
 }
 
+// ─── Uso de disco (barras por punto de montaje, agrupadas por volumen) ─────
+function construirUsoDisco(filas) {
+    if (!filas || filas.length === 0) {
+        return `<p class="mensaje-vacio">Sin datos de uso de disco todavía.</p>`;
+    }
+
+    const porVolumen = new Map();
+    for (const f of filas) {
+        if (!porVolumen.has(f.volumen)) porVolumen.set(f.volumen, []);
+        porVolumen.get(f.volumen).push(f);
+    }
+
+    const bloques = [...porVolumen.entries()].map(([volumen, montajes]) => `
+        <div>
+            <div class="ficha-hardware__etiqueta">Volumen: ${volumen}</div>
+            <div style="display:flex; flex-direction:column; gap:14px; margin-top:10px;">
+                ${montajes.map(m => `
+                    <div>
+                        <div class="disco-barra__fila">
+                            <span>${m.punto_montaje}</span>
+                            <span><span class="ficha-hardware__secundario">${m.usado_gb} GB de ${m.total_gb} GB</span> · <span class="disco-barra__porcentaje" data-estado="${m.estado}">${m.porcentaje}%</span></span>
+                        </div>
+                        <div class="disco-barra">
+                            <div class="disco-barra__relleno" data-estado="${m.estado}" style="width:${Math.min(m.porcentaje, 100)}%"></div>
+                        </div>
+                    </div>
+                `).join("")}
+            </div>
+        </div>
+    `).join(`<div class="ficha-hardware__divisor"></div>`);
+
+    return `<div class="ficha-hardware">${bloques}</div>`;
+}
+
+// ─── Slider de fecha para "Uso de disco" ───────────────────────────────────
+// Reutiliza la MISMA agrupacion (hora/dia/mes) que los chips de arriba del
+// historico de temperatura -- un solo control para las dos cosas. Se pide el
+// arreglo completo una sola vez; mover el slider solo cambia el indice, sin
+// volver a pedir nada al backend (misma logica que el desplazador de la
+// grafica de temperatura).
+async function cargarUsoDiscoHistorico() {
+    if (!estado.servidor) return;
+    const contenedorDisco = document.getElementById("disco-contenido");
+    const contenedorSlider = document.getElementById("disco-slider-contenedor");
+
+    try {
+        const historico = await obtenerJSON(
+            `${API}/servidores/${encodeURIComponent(estado.servidor)}/disco/historico?agrupacion=${estado.agrupacion}`
+        );
+
+        estado.discoHistorico = historico;
+        estado.discoIndice = historico.length > 0 ? historico.length - 1 : 0;
+
+        if (historico.length === 0) {
+            contenedorDisco.innerHTML = `<p class="mensaje-vacio">Sin datos de uso de disco todavía.</p>`;
+            contenedorSlider.hidden = true;
+            return;
+        }
+
+        const slider = document.getElementById("disco-slider");
+        slider.max = String(historico.length - 1);
+        slider.value = String(estado.discoIndice);
+        contenedorSlider.hidden = historico.length <= 1;
+
+        renderDiscoSlider();
+    } catch (e) {
+        contenedorDisco.innerHTML = `<p class="mensaje-vacio">Error al cargar el uso de disco.</p>`;
+        contenedorSlider.hidden = true;
+        console.error(e);
+    }
+}
+
+// Redibuja las barras + las fechas a partir de estado.discoIndice (sin pedir nada al backend).
+function renderDiscoSlider() {
+    const historico = estado.discoHistorico;
+    if (!historico || historico.length === 0) return;
+
+    const punto = historico[estado.discoIndice];
+    document.getElementById("disco-contenido").innerHTML = construirUsoDisco(punto.montajes);
+
+    document.getElementById("disco-fecha-inicio").textContent = formatearFecha(historico[0].periodo, estado.agrupacion);
+    document.getElementById("disco-fecha-fin").textContent = formatearFecha(historico[historico.length - 1].periodo, estado.agrupacion);
+    document.getElementById("disco-fecha-actual").textContent = formatearFecha(punto.periodo, estado.agrupacion);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("disco-slider").addEventListener("input", (ev) => {
+        estado.discoIndice = Number(ev.target.value);
+        renderDiscoSlider();
+    });
+});
+
 // ─── Estado actual (tarjetas + tabla) ──────────────────────────────────────
 async function cargarActual() {
     if (!estado.servidor) return;
@@ -341,6 +436,7 @@ document.addEventListener("DOMContentLoaded", () => {
             boton.setAttribute("aria-pressed", "true");
             estado.agrupacion = boton.dataset.agrupacion;
             cargarHistorico();
+            cargarUsoDiscoHistorico();
         });
     });
 });

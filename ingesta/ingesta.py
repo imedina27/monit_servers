@@ -150,6 +150,52 @@ def parsear_lote(contenido):
     ]
 
 
+# ─── Parseo de uso de disco (archivos "disco_*.csv" del colector) ─────────────
+def parsear_lote_disco(contenido):
+    lector = csv.DictReader(contenido.splitlines())
+    return [
+        (fila["medido_en"], fila["volumen"], fila["punto_montaje"], float(fila["usado_gb"]), float(fila["total_gb"]))
+        for fila in lector
+    ]
+
+
+def insertar_lote_disco(conn, servidor_id, nombre_archivo, origen, filas):
+    """Analogo a insertar_lote(), pero para uso_disco en vez de lecturas."""
+    with conn.cursor() as cur:
+        execute_values(
+            cur,
+            """
+            INSERT INTO uso_disco (servidor_id, medido_en, volumen, punto_montaje, usado_gb, total_gb)
+            VALUES %s
+            ON CONFLICT (servidor_id, medido_en, punto_montaje) DO NOTHING
+            """,
+            [(servidor_id, *fila) for fila in filas],
+        )
+        cur.execute(
+            """
+            INSERT INTO archivos_ingeridos (servidor_id, nombre_archivo, origen, filas_cargadas)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (servidor_id, nombre_archivo, origen, len(filas)),
+        )
+    conn.commit()
+
+
+def procesar_archivo_lote(conn, servidor_id, nombre_archivo, origen, contenido):
+    """
+    Un archivo .csv puede ser de temperaturas ("lecturas_*.csv") o de uso de
+    disco ("disco_*.csv") -- el colector los distingue por prefijo, aqui se
+    enruta al parser/insertador correcto. Regresa cuantas filas se cargaron.
+    """
+    if nombre_archivo.startswith("disco_"):
+        filas = parsear_lote_disco(contenido)
+        insertar_lote_disco(conn, servidor_id, nombre_archivo, origen, filas)
+    else:
+        filas = parsear_lote(contenido)
+        insertar_lote(conn, servidor_id, nombre_archivo, origen, filas)
+    return len(filas)
+
+
 # ─── Recoleccion del relay de un gateway (ver paso 14 del ROADMAP) ────────────
 def recolectar_relay_gateway(sftp, nombre_gateway, servidor, directorio_offline):
     """
@@ -244,15 +290,14 @@ def procesar_online(nombre, servidor, directorio_offline):
             with sftp.open(ruta_remota, "r") as f:
                 contenido = f.read().decode("utf-8")
 
-            filas = parsear_lote(contenido)
-            insertar_lote(conn, servidor_id, nombre_archivo, "online", filas)
+            n_filas = procesar_archivo_lote(conn, servidor_id, nombre_archivo, "online", contenido)
 
             try:
                 sftp.remove(ruta_remota)
             except Exception as e:
                 logging.warning(f"[{nombre}] Cargado pero no se pudo borrar {nombre_archivo} del servidor: {e}")
 
-            logging.info(f"[{nombre}] Cargado: {nombre_archivo} ({len(filas)} lecturas)")
+            logging.info(f"[{nombre}] Cargado: {nombre_archivo} ({n_filas} filas)")
             procesados += 1
 
         try:
@@ -302,15 +347,14 @@ def procesar_offline(directorio_offline, inventario):
                 with open(ruta_archivo, encoding="utf-8") as f:
                     contenido = f.read()
 
-                filas = parsear_lote(contenido)
-                insertar_lote(conn, servidor_id, nombre_archivo, "offline", filas)
+                n_filas = procesar_archivo_lote(conn, servidor_id, nombre_archivo, "offline", contenido)
 
                 try:
                     os.remove(ruta_archivo)
                 except Exception as e:
                     logging.warning(f"[{nombre_carpeta}] Cargado pero no se pudo borrar {nombre_archivo}: {e}")
 
-                logging.info(f"[{nombre_carpeta}] Cargado (offline): {nombre_archivo} ({len(filas)} lecturas)")
+                logging.info(f"[{nombre_carpeta}] Cargado (offline): {nombre_archivo} ({n_filas} filas)")
                 total_procesados += 1
     finally:
         conn.close()

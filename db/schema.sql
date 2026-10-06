@@ -40,6 +40,24 @@ CREATE TABLE lecturas (
 -- Acelera las consultas del dashboard/API (agregaciones por servidor y rango de fecha).
 CREATE INDEX idx_lecturas_servidor_fecha ON lecturas (servidor_id, medido_en DESC);
 
+-- Uso de disco por punto de montaje real (no tmpfs/overlay/devtmpfs/etc).
+-- Tabla separada de 'lecturas' a propósito -- no es temperatura, no tiene
+-- sentido forzarla en 'componente'/'temperatura_c'. Se guarda como serie de
+-- tiempo igual que 'lecturas' aunque el dashboard hoy solo muestre el
+-- ultimo valor -- deja la puerta abierta a una grafica historica despues.
+CREATE TABLE uso_disco (
+    id            BIGSERIAL PRIMARY KEY,
+    servidor_id   INTEGER NOT NULL REFERENCES servidores(id),
+    medido_en     TIMESTAMPTZ NOT NULL,
+    volumen       VARCHAR(100) NOT NULL,  -- grupo LVM o disco fisico, ej "ubuntu-vg" o "/dev/sdb"
+    punto_montaje VARCHAR(100) NOT NULL,  -- ej "/", "/home"
+    usado_gb      NUMERIC(10,1) NOT NULL,
+    total_gb      NUMERIC(10,1) NOT NULL,
+    UNIQUE (servidor_id, medido_en, punto_montaje)
+);
+
+CREATE INDEX idx_uso_disco_servidor_fecha ON uso_disco (servidor_id, medido_en DESC);
+
 -- Hardware (informativo, solo para mostrarse en el dashboard -- no afecta el
 -- calculo del semaforo). Administrado a mano via db/gestionar_servidor.py;
 -- la sincronizacion automatica de ingesta.py (sincronizar_todo) nunca escribe
