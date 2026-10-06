@@ -168,6 +168,13 @@ El histórico completo (hasta 7 meses) se amontonaba en una sola vista. Ahora la
 - Todo es client-side: el historico completo se trae una sola vez del backend; el zoom/desplazamiento solo recorta y reescala en el navegador, sin pegarle de nuevo a la API.
 - El refresco automático (cada 5 min) y el cambio de tema ya no resetean el zoom/desplazamiento del usuario.
 
+### Extra: legibilidad de "Estado actual" (títulos, controles, lecturas obsoletas) ✅
+
+- **Títulos**: "Server Temperature Monitor" → **"Infrastructure Health Monitor"** (la página ya no es solo temperatura, incluye hardware y uso de disco); "Histórico" → **"Temperatura CPU/GPU"** (nombra justo lo que grafica).
+- **Controles de agrupación reubicados**: los botones "Por hora/día/mes" + "Actualizar" vivían junto a la gráfica histórica, separados de las tarjetas de "Estado actual" que también dependen de ellos indirectamente — se movieron a justo debajo de las tarjetas, quedando entre "Estado actual" y "Temperatura CPU/GPU".
+- **Bug real detectado y corregido**: en `colima01`, el driver de NVIDIA se cayó (`nvidia-smi` dejó de funcionar) y la GPU dejó de reportar lecturas nuevas, pero la tarjeta de "Estado actual" seguía mostrando la última temperatura conocida (de varios días atrás) como si fuera el valor presente, sin ninguna forma de distinguirla de un dato fresco — el endpoint `/actual` siempre devuelve la última fila que exista por sensor, sin importar su antigüedad. Corregido en el dashboard: cualquier tarjeta (CPU o GPU) cuya última lectura tenga más de 3 horas de antigüedad (el intervalo normal de muestreo es 1h) ahora muestra `-- °C` con el punto de estado en gris, en vez del valor viejo; al pasar el mouse, un tooltip muestra la fecha real de esa última lectura.
+- **Fecha en el título "Estado actual"**: ahora muestra entre paréntesis la fecha de la lectura más reciente de ese servidor (ej. "Estado actual (05/10/2026)"), para que quede claro de qué día son los datos — se recalcula en cada refresco (automático cada 5 min, botón "Actualizar", o cambio de servidor).
+
 ## 8. Respaldo y restauración de la base de datos
 
 - Scripts de línea de comandos para respaldar/restaurar `monit_srv` completa, pensados para recuperarse de un formateo de la máquina central.

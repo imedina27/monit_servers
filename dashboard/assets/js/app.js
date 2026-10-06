@@ -368,11 +368,20 @@ async function cargarActual() {
 
         contenedorHardware.innerHTML = construirFichaHardware(hardware);
 
+        const fechaLecturas = document.getElementById("fecha-lecturas");
+
         if (lecturas.length === 0) {
             contenedorTarjetas.innerHTML = `<p class="mensaje-vacio">Sin lecturas todavía para este servidor.</p>`;
             cuerpoTabla.innerHTML = "";
+            fechaLecturas.textContent = "";
             return;
         }
+
+        const masReciente = lecturas.reduce((max, l) => {
+            const t = new Date(l.medido_en);
+            return t > max ? t : max;
+        }, new Date(lecturas[0].medido_en));
+        fechaLecturas.textContent = `(${masReciente.toLocaleDateString("es-MX")})`;
 
         // Tarjeta de CPU: se muestra el core mas caliente (peor caso), no el promedio.
         const cpu = lecturas.filter(l => l.componente === "cpu");
@@ -401,16 +410,28 @@ async function cargarActual() {
             tarjetas.push({ titulo: g.sensor.replace("_", " "), ...g, sensor: subtituloGpu || g.sensor, color: cssVar(coloresGpu[i % coloresGpu.length]) });
         });
 
-        contenedorTarjetas.innerHTML = tarjetas.map(t => `
+        // Si el componente dejo de reportar (ej. GPU con driver caido), su ultima
+        // lectura puede ser de hace dias/semanas. Mostrarla como si fuera el valor
+        // actual es enganoso, asi que a partir de este umbral se muestra "--".
+        const UMBRAL_OBSOLETO_MS = 3 * 60 * 60 * 1000; // 3 horas (el intervalo normal de muestreo es 1h)
+        const esObsoleta = (medidoEn) => (Date.now() - new Date(medidoEn).getTime()) > UMBRAL_OBSOLETO_MS;
+
+        contenedorTarjetas.innerHTML = tarjetas.map(t => {
+            const obsoleta = esObsoleta(t.medido_en);
+            const atributoTitulo = obsoleta
+                ? ` title="Sin lecturas recientes · última: ${new Date(t.medido_en).toLocaleString("es-MX")}"`
+                : "";
+            return `
             <div class="tarjeta">
                 <div class="tarjeta__titulo">${t.titulo}</div>
-                <div class="tarjeta__valor">
-                    <span class="punto-estado" data-estado="${t.estado || ''}"></span>${t.temperatura_c}<span class="tarjeta__unidad">°C</span>
+                <div class="tarjeta__valor"${atributoTitulo}>
+                    <span class="punto-estado" data-estado="${obsoleta ? '' : (t.estado || '')}"></span>${obsoleta ? "--" : t.temperatura_c}<span class="tarjeta__unidad">°C</span>
                 </div>
                 <div class="tarjeta__sensor">${t.sensor}</div>
                 <div class="tarjeta__franja" style="background-color:${t.color}"></div>
             </div>
-        `).join("");
+        `;
+        }).join("");
 
         cuerpoTabla.innerHTML = lecturas.map(l => `
             <tr>

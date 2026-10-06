@@ -30,7 +30,7 @@ quien no siguió el trabajo commit por commit).
 - **Colectores**: un programa por SO (Ubuntu/Windows) que mide temperatura de CPU/GPU y uso de disco por punto de montaje en cada servidor.
 - **Ingesta**: módulo único que descarga datos (modo online, vía scheduler, modo offline manual, o vía relay para sitios con compañeros) y los carga a Postgres — distingue temperatura de uso de disco por el nombre del archivo.
 - **Backend/API**: capa que sirve agregaciones por hora/día/mes al dashboard, además del hardware/umbrales por servidor (administrados aparte, ver "Administrar un servidor").
-- **Dashboard HTML**: gráfica de temperatura con zoom/desplazamiento, ficha técnica de hardware (chasis/CPU/GPU/RAM+DIMMs/discos/RAID), y uso de disco con un slider para navegar hasta 1 año de histórico.
+- **Dashboard HTML**: gráfica de temperatura con zoom/desplazamiento, ficha técnica de hardware (chasis/CPU/GPU/RAM+DIMMs/discos/RAID), y uso de disco con un slider para navegar hasta 1 año de histórico. La sección "Estado actual" muestra la fecha de la lectura más reciente, y marca con `-- °C` cualquier sensor (CPU/GPU) cuya última lectura tenga más de 3h de antigüedad, para no mostrar un dato viejo como si fuera el valor presente.
 
 ## Instalación
 

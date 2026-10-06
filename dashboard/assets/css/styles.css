@@ -292,6 +292,11 @@ main {
     opacity: 0.55;
 }
 
+h2 .h2__fecha {
+    font-size: 12px;
+    font-weight: 500;
+}
+
 h2 {
     font-size: 15px;
     font-weight: 600;
@@ -360,10 +365,12 @@ section {
     border-radius: 50%;
     margin-right: 6px;
     flex-shrink: 0;
+    background-color: var(--texto-secundario);
+    opacity: 0.35;
 }
-.punto-estado[data-estado="verde"] { background-color: var(--verde); }
-.punto-estado[data-estado="ambar"] { background-color: var(--ambar); }
-.punto-estado[data-estado="rojo"]  { background-color: var(--rojo); }
+.punto-estado[data-estado="verde"] { opacity: 1; background-color: var(--verde); }
+.punto-estado[data-estado="ambar"] { opacity: 1; background-color: var(--ambar); }
+.punto-estado[data-estado="rojo"]  { opacity: 1; background-color: var(--rojo); }
 
 /* Semaforo de 3 puntos fijos (tabla de "todos los sensores"): siempre se ven
    los 3 colores, solo el que corresponde al estado actual queda "encendido". */
