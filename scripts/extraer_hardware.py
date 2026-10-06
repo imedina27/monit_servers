@@ -95,8 +95,20 @@ def leer_cpu():
 def leer_gpu():
     if not ejecutar("which nvidia-smi"):
         return []
-    salida = ejecutar("nvidia-smi --query-gpu=name --format=csv,noheader")
-    return [{"modelo": linea.strip()} for linea in salida.splitlines() if linea.strip()]
+    # No se usa ejecutar(): cuando el driver esta caido, nvidia-smi regresa
+    # codigo de salida != 0 pero IGUAL imprime un mensaje de error por stdout
+    # ("NVIDIA-SMI has failed because...") -- hay que checar el returncode,
+    # si no ese mensaje se guarda como si fuera el nombre de la GPU.
+    try:
+        resultado = subprocess.run(
+            "nvidia-smi --query-gpu=name --format=csv,noheader",
+            shell=True, capture_output=True, text=True, timeout=15,
+        )
+    except Exception:
+        return []
+    if resultado.returncode != 0:
+        return []
+    return [{"modelo": linea.strip()} for linea in resultado.stdout.splitlines() if linea.strip()]
 
 
 # ─── RAM (total + DIMMs, requiere root para el detalle) ─────────────────────
