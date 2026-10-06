@@ -402,6 +402,7 @@ section {
    ============================================================ */
 details {
     margin-top: 12px;
+    margin-bottom: 32px;
 }
 summary {
     cursor: pointer;
