@@ -153,6 +153,10 @@ El combo plano de servidores se iba a volver inmanejable con 15-20+ servidores d
 - Árbol movido al lado **derecho** de la pantalla (no izquierdo).
 - **Orden real del YAML, no alfabético**: se agregó columna `orden` a `grupos` y `servidores`; `ingesta.py` la recalcula en cada corrida a partir de la posición de cada servidor en el inventario (un grupo repetido conserva el orden de su primera aparición). Backend y dashboard ordenan por esa columna.
 
+### Extra: ficha técnica de hardware en el dashboard ✅
+
+Debajo de "Todos los sensores", una ficha fija (siempre visible, no colapsable — decisión del usuario tras comparar varias opciones de diseño) con todo el hardware que viva en Postgres para ese servidor (ver paso 6): chasis (marca/modelo/serie/versión de SO + badge de garantía cuando no hay soporte), CPU, GPU, memoria total + detalle por DIMM (punto verde/ámbar según su estado, ej. "Degraded"), almacenamiento y RAID. Cada sección se omite sola si el servidor no tiene ese dato cargado — no hay huecos ni placeholders vacíos. Diseño validado primero con un mock usando datos reales de `DEVELOP`, antes de implementarlo.
+
 ### Extra: zoom y desplazamiento en la gráfica histórica ✅
 
 El histórico completo (hasta 7 meses) se amontonaba en una sola vista. Ahora la gráfica muestra una ventana acotada por defecto, con zoom (rueda del mouse) y desplazamiento (barra bajo la gráfica):
@@ -366,6 +370,16 @@ Un detalle que salió al hacerlo: LVM complica el "volumen" — `lsblk` no resue
 
 Umbrales confirmados: verde ≤70%, ámbar 70–90%, rojo >90% (`UMBRAL_DISCO` en `backend/main.py`, igual para todos los servidores, sin override por servidor).
 
+### Extra: slider de fecha para navegar el histórico de disco ✅
+
+A petición del usuario, tras ver el resultado del paso 16 — mostrar el uso de disco de **otras fechas**, no solo "lo último", con un control deslizable debajo de las barras.
+
+- **Mock interactivo primero** (no solo una imagen estática): se construyó un componente funcional de verdad (slider arrastrable + chips de granularidad) con datos sintéticos, para validar la interacción antes de tocar el backend — [ver mock](https://claude.ai/artifact/4LhSCh9NSdffVjNE639qYW) (segundo artboard, "SliderDisco").
+- **Decisión de diseño del usuario**: el slider **reutiliza los mismos chips** "Por hora/día/mes" que ya controlan la gráfica de temperatura de arriba — un solo control para las dos cosas, en vez de un segundo juego de botones. Rango: todo el histórico disponible hasta 1 año atrás (no fuerza un año completo si hay menos datos).
+- **Backend**: `/api/servidores/{nombre}/disco` se reemplazó por `GET /api/servidores/{nombre}/disco/historico?agrupacion=hora|dia|mes` — un snapshot por periodo (misma idea que `/historico` de temperatura), hasta 1 año.
+- **Dashboard**: el arreglo completo se pide una sola vez por agrupación; arrastrar el slider solo cambia el índice y redibuja, sin volver a pedir nada al backend (mismo criterio que el desplazador de la gráfica de temperatura). Fecha de inicio/fin a los lados, fecha actual al centro en negritas.
+- El slider se queda oculto cuando un servidor todavía no acumula más de una lectura para esa agrupación (nada que recorrer) — aparece solo conforme el colector genera más ciclos.
+
 **Paso 16 cerrado.**
 
 ## Pendiente de decidir
@@ -373,7 +387,8 @@ Umbrales confirmados: verde ≤70%, ámbar 70–90%, rojo >90% (`UMBRAL_DISCO` e
 - ~~Valores exactos de los umbrales de temperatura para el semáforo (paso 6, backend).~~ Resuelto el 2026-10-05 — umbral por servidor en Postgres (tabla `umbrales`), con valores investigados por modelo real de CPU/GPU (Intel ARK, AMD, NVIDIA; algunos estimados por convención de generación donde el fabricante no publica Tjmax exacto por SKU). El default genérico (70/85°C CPU, 75/85°C GPU) se queda como fallback en `backend/main.py` para servidores sin hardware identificado todavía (ej. QLYMSPROD01/02 de AbInBev, sitio offline sin acceso).
 - ~~Detalles de la imagen empresarial Quantum a aplicar (paso 7).~~ Resuelto — colores, logo y tipografía reales ya aplicados en el dashboard (paso 7).
 - **Ambiente conda para `colector_ubuntu`** (paso 1 / instalación): el usuario quiere que la instalación en servidores use un ambiente virtual con conda antes de todo. Pendiente: por qué `conda` no aparece en DEVELOP (`which conda` no encontró nada, ni en rutas comunes) — el usuario lo va a verificar. Una vez resuelto, falta decidir nombre del ambiente y versión de Python, y documentarlo en el README. No bloquea el paso 9 — puede resolverse en paralelo.
-- **Correr `scripts/extraer_hardware.py` (con `sudo`) en todos los servidores monitoreados y cargar los `.json` resultantes con `db/gestionar_servidor.py importar`** (2026-10-06). Pendiente para: completar el detalle de DIMMs y el número de serie de chasis en los servidores donde todavía falta (`MINI_LENOVO`, `quantumdata`, `colima00`, `colima02`, `TAD_18_de_Marzo`), y refrescar/confirmar el resto con una lectura reciente.
+- ~~Correr `scripts/extraer_hardware.py` (con `sudo`) en todos los servidores monitoreados y cargar los `.json` resultantes con `db/gestionar_servidor.py importar`.~~ Resuelto el 2026-10-06 — corrido en los 10 servidores alcanzables (todos ya tienen DIMMs + número de serie reales en Postgres). De paso corrigió un dato que tenía mal puesto a mano (el número de serie de `colima00` estaba guardado bajo `colima01`, por una confusión de una tabla de Excel — el dato verificado por root lo corrigió solo). `QLYMSPROD01`/`QLYMSPROD02` (AbInBev) siguen sin este detalle — sitio sin acceso de red, su hardware solo se conoce por el Excel que proporcionó el usuario (sin DIMMs root-verificados ni posibilidad de obtenerlos remoto).
+- **Umbral de temperatura propio para `MINI_LENOVO`, `QLYMSPROD01` y `QLYMSPROD02`**: siguen usando el default genérico (70/85°C CPU, 75/85°C GPU) aunque ya conocemos su hardware real (`ARM Cortex-X925/A725 + GB10`, `2x Intel Xeon Gold 5118 + Tesla P100` respectivamente) — falta investigar sus umbrales reales e insertarlos con `db/gestionar_servidor.py umbrales`.
 
 ## Mejoras futuras (no bloquean el roadmap)
 

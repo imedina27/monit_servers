@@ -27,10 +27,10 @@ quien no siguió el trabajo commit por commit).
 
 ## Arquitectura (resumen)
 
-- **Colectores**: un programa por SO (Ubuntu/Windows) que mide temperatura de CPU/GPU en cada servidor.
-- **Ingesta**: módulo único que descarga datos (modo online, vía scheduler) o procesa archivos entregados manualmente (modo offline), y los carga a Postgres.
-- **Backend/API**: capa que sirve agregaciones por hora/día/mes al dashboard.
-- **Dashboard HTML**: visualización de variaciones de temperatura por hora/día/mes.
+- **Colectores**: un programa por SO (Ubuntu/Windows) que mide temperatura de CPU/GPU y uso de disco por punto de montaje en cada servidor.
+- **Ingesta**: módulo único que descarga datos (modo online, vía scheduler, modo offline manual, o vía relay para sitios con compañeros) y los carga a Postgres — distingue temperatura de uso de disco por el nombre del archivo.
+- **Backend/API**: capa que sirve agregaciones por hora/día/mes al dashboard, además del hardware/umbrales por servidor (administrados aparte, ver "Administrar un servidor").
+- **Dashboard HTML**: gráfica de temperatura con zoom/desplazamiento, ficha técnica de hardware (chasis/CPU/GPU/RAM+DIMMs/discos/RAID), y uso de disco con un slider para navegar hasta 1 año de histórico.
 
 ## Instalación
 
@@ -277,7 +277,7 @@ Completa ahí los servidores reales (ver paso 5 de la instalación del colector 
 
 Los umbrales de temperatura (verde/ámbar/rojo) y el hardware (chasis + garantia, CPU/GPU, RAM total + DIMMs, discos, RAID, solo informativo para el dashboard) viven en Postgres, no en archivos — ver "Administrar un servidor" más abajo. Un servidor sin umbral propio usa el default genérico (`UMBRALES_DEFAULT` en `backend/main.py`); un servidor sin hardware cargado simplemente no muestra esa info en el dashboard.
 
-El dashboard también muestra el **uso de disco** por punto de montaje (ej. `/`, `/home`), agrupado por volumen/disco físico, con el mismo semáforo verde/ámbar/rojo (`UMBRAL_DISCO` en `backend/main.py`, 70%/90%, igual para todos los servidores). El colector lo lee de `/proc/mounts` (filtrando `tmpfs`/`overlay`/etc. con una lista blanca de sistemas de archivos reales) y lo guarda en un archivo `disco_<fecha>.csv` aparte de `lecturas_<fecha>.csv` — la ingesta distingue el tipo de archivo por su nombre y carga a la tabla `uso_disco` (serie de tiempo, aunque el dashboard solo muestra el último valor).
+El dashboard también muestra el **uso de disco** por punto de montaje (ej. `/`, `/home`), agrupado por volumen/disco físico, con el mismo semáforo verde/ámbar/rojo (`UMBRAL_DISCO` en `backend/main.py`, 70%/90%, igual para todos los servidores). El colector lo lee de `/proc/mounts` (filtrando `tmpfs`/`overlay`/etc. con una lista blanca de sistemas de archivos reales) y lo guarda en un archivo `disco_<fecha>.csv` aparte de `lecturas_<fecha>.csv` — la ingesta distingue el tipo de archivo por su nombre y carga a la tabla `uso_disco` (serie de tiempo, hasta 1 año). El dashboard trae un **slider de fecha** debajo de las barras para navegar ese histórico — reutiliza los mismos chips "Por hora/día/mes" que ya controlan la gráfica de temperatura, un solo control para las dos cosas.
 
 #### Paso 6 — Levantar el servidor
 
@@ -406,6 +406,8 @@ sudo python3 extraer_hardware.py
 
 Sin `sudo` igual corre, pero sin el detalle de DIMMs ni el número de serie del chasis (ambos requieren `dmidecode` con root) — el script avisa claramente cuando pasa esto. Copia el `.json` resultante a la máquina central y cárgalo con `gestionar_servidor.py importar` (arriba).
 
+> El `"hostname"` que guarda el `.json` es el que reporta el propio Linux (`hostname`), que no siempre coincide con el nombre del inventario (ej. una laptop puede reportar `thinkstationpgx-07fb` en vez de `MINI_LENOVO`) — si no coinciden, `importar` no encuentra el servidor. Edita el campo `"hostname"` del `.json` al nombre real del inventario antes de importar en ese caso.
+
 ## Estructura del proyecto
 
 ```text
@@ -441,7 +443,7 @@ Monit_Servers_V2/
 │   ├── migrar_historico_csv.py
 │   ├── respaldar.py
 │   ├── restaurar.py
-│   └── gestionar_servidor.py               ← hardware / umbrales / baja de un servidor (interactivo)
+│   └── gestionar_servidor.py               ← hardware / umbrales / baja / importar de un servidor
 │
 ├── bkp/Data_Base/                         ← (gitignored) respaldos .sql generados por respaldar.py
 │
