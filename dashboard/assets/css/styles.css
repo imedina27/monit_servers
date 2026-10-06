@@ -610,7 +610,7 @@ th {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 14px;
+    margin-top: 32px;
     flex-wrap: wrap;
 }
 

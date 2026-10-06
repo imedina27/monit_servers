@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Monitoreo de Temperaturas - Quantum Labs</title>
+<title>Infrastructure Health Monitor - Quantum Labs</title>
 <link rel="icon" type="image/png" href="assets/img/icono-naranja.png">
 <link rel="stylesheet" href="assets/css/styles.css">
 </head>
@@ -13,7 +13,7 @@
     <div class="encabezado__marca">
         <img id="logo" class="encabezado__logo" src="assets/img/logo-horizontal-naranja.png" alt="Quantum Labs">
     </div>
-    <h1 class="encabezado__titulo">Server Temperature Monitor</h1>
+    <h1 class="encabezado__titulo">Infrastructure Health Monitor</h1>
     <div class="encabezado__controles">
         <button id="boton-tema" class="boton-tema" title="Cambiar tema" aria-label="Cambiar tema">
             <img id="icono-tema" src="assets/img/tema-oscuro.png" alt="">
@@ -28,6 +28,16 @@
         <section id="seccion-actual">
             <h2>Estado actual</h2>
             <div id="tarjetas" class="tarjetas"></div>
+            <div class="historico__controles" id="chips-agrupacion">
+                <div class="historico__chips">
+                    <button class="chip" data-agrupacion="hora" aria-pressed="true">Por hora</button>
+                    <button class="chip" data-agrupacion="dia" aria-pressed="false">Por día</button>
+                    <button class="chip" data-agrupacion="mes" aria-pressed="false">Por mes</button>
+                </div>
+                <button id="boton-actualizar" class="boton-actualizar" title="Descargar lecturas nuevas de los servidores">
+                    <span class="boton-actualizar__icono">↻</span> Actualizar
+                </button>
+            </div>
         </section>
 
         <!-- En pantallas grandes, app.js mueve este bloque a #reservado (columna
@@ -52,17 +62,7 @@
         </section>
 
         <section id="seccion-historico">
-            <h2>Histórico</h2>
-            <div class="historico__controles" id="chips-agrupacion">
-                <div class="historico__chips">
-                    <button class="chip" data-agrupacion="hora" aria-pressed="true">Por hora</button>
-                    <button class="chip" data-agrupacion="dia" aria-pressed="false">Por día</button>
-                    <button class="chip" data-agrupacion="mes" aria-pressed="false">Por mes</button>
-                </div>
-                <button id="boton-actualizar" class="boton-actualizar" title="Descargar lecturas nuevas de los servidores">
-                    <span class="boton-actualizar__icono">↻</span> Actualizar
-                </button>
-            </div>
+            <h2>Temperatura CPU/GPU</h2>
             <div class="grafica-contenedor">
                 <div class="grafica-contenedor__barra">
                     <div id="leyenda" class="leyenda"></div>
