@@ -15,7 +15,10 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # postgres:18+ exige montar en /var/lib/postgresql directo (ya no /var/lib/postgresql/data
+      # como en 16) -- cambia a su propio layout tipo pg_ctlcluster, con subcarpeta por version
+      # mayor. Montar en la ruta vieja hace que el contenedor aborte con un error claro al iniciar.
+      - pgdata:/var/lib/postgresql
       # Solo se aplica la primera vez que el volumen "pgdata" se crea vacio.
       - ../db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     networks:
