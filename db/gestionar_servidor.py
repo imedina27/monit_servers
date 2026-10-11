@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 
-import psycopg2
+import psycopg
 from dotenv import load_dotenv
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -27,7 +27,7 @@ hardware/umbrales o lo da de baja por completo.
 
 
 def conectar_db():
-    return psycopg2.connect(
+    return psycopg.connect(
         host=os.environ["DB_HOST"],
         port=os.environ.get("DB_PORT", "5432"),
         dbname=os.environ["DB_NAME"],
@@ -458,11 +458,14 @@ def cmd_baja(conn, nombre):
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM lecturas WHERE servidor_id = %s", (servidor_id,))
         n_lecturas = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM uso_disco WHERE servidor_id = %s", (servidor_id,))
+        n_disco = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM archivos_ingeridos WHERE servidor_id = %s", (servidor_id,))
         n_archivos = cur.fetchone()[0]
 
     print(f"\nEsto borrara PERMANENTEMENTE a '{nombre}' de la base de datos:")
     print(f"  - {n_lecturas} lecturas")
+    print(f"  - {n_disco} registros de uso de disco")
     print(f"  - {n_archivos} registros de archivos ya ingeridos")
     print("  - su hardware, discos, RAID y umbrales (si tenia)")
     print("Tambien quitalo de 'inventario_servidores.yaml' si es un retiro definitivo")
@@ -475,8 +478,11 @@ def cmd_baja(conn, nombre):
     with conn.cursor() as cur:
         cur.execute("DELETE FROM archivos_ingeridos WHERE servidor_id = %s", (servidor_id,))
         cur.execute("DELETE FROM lecturas WHERE servidor_id = %s", (servidor_id,))
-        # hardware_cpu/hardware_gpu/hardware_ram/discos/raid/umbrales tienen
-        # ON DELETE CASCADE sobre servidores(id) -- se limpian solos.
+        # uso_disco no tiene ON DELETE CASCADE (a diferencia de hardware_cpu/gpu/ram/discos/raid/
+        # umbrales, que si lo tienen sobre servidores(id)) -- se agrego en el paso 16, despues de
+        # escribirse esta funcion, y se quedo fuera. Sin este DELETE, el de abajo (servidores)
+        # fallaria por la FK si el servidor tiene uso de disco cargado.
+        cur.execute("DELETE FROM uso_disco WHERE servidor_id = %s", (servidor_id,))
         cur.execute("DELETE FROM servidores WHERE id = %s", (servidor_id,))
     conn.commit()
     print(f"'{nombre}' eliminado.")

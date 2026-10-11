@@ -2,8 +2,8 @@ import os
 import sys
 from pathlib import Path
 
-import psycopg2
-import psycopg2.extras
+import psycopg
+from psycopg.rows import dict_row
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -32,7 +32,7 @@ app = FastAPI(title="Monit Servers V2 - API")
 
 
 def conectar_db():
-    return psycopg2.connect(
+    return psycopg.connect(
         host=os.environ["DB_HOST"],
         port=os.environ.get("DB_PORT", "5432"),
         dbname=os.environ["DB_NAME"],
@@ -92,7 +92,7 @@ def ejecutar_ingesta():
 
 @app.get("/api/servidores")
 def listar_servidores():
-    with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
         cur.execute("SELECT id, nombre, sistema_operativo, activo FROM servidores ORDER BY orden")
         return cur.fetchall()
 
@@ -105,7 +105,7 @@ def listar_arbol():
     de cada grupo arma la jerarquia; los servidores sin grupo_id se agrupan
     aparte para no perderlos de vista.
     """
-    with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
         cur.execute("SELECT id, nombre, grupo_padre_id FROM grupos ORDER BY orden")
         grupos = cur.fetchall()
         cur.execute("SELECT nombre, grupo_id, activo FROM servidores WHERE grupo_id IS NOT NULL ORDER BY orden")
@@ -137,7 +137,7 @@ def listar_arbol():
 
 @app.get("/api/servidores/{nombre}/actual")
 def temperatura_actual(nombre: str):
-    with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
         servidor_id = obtener_servidor_id(cur, nombre)
         umbrales_servidor = obtener_umbrales_servidor(cur, servidor_id)
         cur.execute(
@@ -160,7 +160,7 @@ def temperatura_actual(nombre: str):
 
 @app.get("/api/servidores/{nombre}/hardware")
 def hardware_servidor(nombre: str):
-    with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
         servidor_id = obtener_servidor_id(cur, nombre)
 
         resultado = {}
@@ -222,7 +222,7 @@ def uso_disco_historico(nombre: str, agrupacion: str = Query("dia", pattern="^(h
     """
     unidad_sql = {"hora": "hour", "dia": "day", "mes": "month"}[agrupacion]
 
-    with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
         servidor_id = obtener_servidor_id(cur, nombre)
         cur.execute(
             """
@@ -255,7 +255,7 @@ def uso_disco_historico(nombre: str, agrupacion: str = Query("dia", pattern="^(h
 def historico(nombre: str, agrupacion: str = Query("hora", pattern="^(hora|dia|mes)$")):
     unidad_sql = {"hora": "hour", "dia": "day", "mes": "month"}[agrupacion]
 
-    with conectar_db() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
         servidor_id = obtener_servidor_id(cur, nombre)
         cur.execute(
             """

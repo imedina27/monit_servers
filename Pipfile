@@ -8,7 +8,7 @@ paramiko = "*"
 pythonnet = "*"
 python-dotenv = "*"
 pyyaml = "*"
-psycopg2-binary = "*"
+psycopg = {extras = ["binary"], version = "*"}
 fastapi = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 

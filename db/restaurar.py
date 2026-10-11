@@ -5,7 +5,7 @@ import sys
 from glob import glob
 from pathlib import Path
 
-import psycopg2
+import psycopg
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -45,7 +45,7 @@ def elegir_archivo():
 
 def asegurar_base_existe():
     """Si la base no existe (ej. maquina recien formateada), la crea antes de restaurar."""
-    conn = psycopg2.connect(
+    conn = psycopg.connect(
         host=os.environ["DB_HOST"],
         port=os.environ.get("DB_PORT", "5432"),
         dbname="postgres",

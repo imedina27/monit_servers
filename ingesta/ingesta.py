@@ -6,8 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yaml
 import paramiko
-import psycopg2
-from psycopg2.extras import execute_values
+import psycopg
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -44,13 +43,27 @@ def cargar_inventario():
 
 # ─── Base de datos ─────────────────────────────────────────────────────────────
 def conectar_db():
-    return psycopg2.connect(
+    return psycopg.connect(
         host=os.environ["DB_HOST"],
         port=os.environ.get("DB_PORT", "5432"),
         dbname=os.environ["DB_NAME"],
         user=os.environ["DB_USER"],
         password=os.environ["DB_PASSWORD"],
     )
+
+
+def execute_values(cur, query, rows):
+    """
+    Reemplazo minimo de psycopg2.extras.execute_values (sin equivalente directo en
+    psycopg v3): junta las filas en un solo INSERT de varios VALUES (...), en vez de
+    una ejecucion por fila, igual que hacia execute_values. 'query' debe traer
+    exactamente un "VALUES %s" literal.
+    """
+    if not rows:
+        return
+    placeholder_fila = "(" + ", ".join(["%s"] * len(rows[0])) + ")"
+    query_final = query.replace("VALUES %s", "VALUES " + ", ".join([placeholder_fila] * len(rows)))
+    cur.execute(query_final, [valor for fila in rows for valor in fila])
 
 
 def obtener_grupo_id(conn, ruta_grupo):
