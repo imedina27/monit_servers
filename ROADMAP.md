@@ -286,7 +286,7 @@ El dashboard ya no depende de que haya una terminal abierta corriendo `uvicorn` 
 - Confirmar que DEVELOP tiene salida de red hacia todos los demás servidores monitoreados (hoy esa salida es desde la máquina Windows); para DEVELOP mismo ya no haría falta SSH a sí mismo si se lee directo del disco local.
 - Manejo de secretos (`.env`) vía archivo de entorno de Docker Compose, nunca horneados en la imagen.
 - Instalar Docker + Docker Compose en DEVELOP (Ubuntu Server — sin las restricciones de Control de Aplicaciones que sí tiene la máquina Windows).
-- **Explorar usar `psycopg` v3** en vez de `psycopg2-binary`: la razón original para usar v2 fue que Control de Aplicaciones de Windows bloqueaba la DLL binaria de v3 en la máquina del usuario — esa restricción no existe en DEVELOP (Ubuntu Server), así que vale la pena revisar si conviene el cambio al dockerizar. No es necesario — lo que ya funciona en v2 sigue funcionando igual.
+- ~~Explorar usar `psycopg` v3 en vez de `psycopg2-binary`.~~ Resuelto el 2026-10-10, al preparar la prueba de Docker (paso 13) — se confirmó primero que el bloqueo de la política de Control de Aplicaciones de Windows ya no aplica a `psycopg[binary]` v3 en esta máquina (instalación y conexión real probadas antes de tocar código), y se migraron los 5 archivos que usaban `psycopg2` (`backend/main.py`, `ingesta/ingesta.py`, `db/gestionar_servidor.py`, `db/migrar_historico_csv.py`, `db/restaurar.py`), el `Pipfile`/`Pipfile.lock` y `docker/requirements.txt`. `execute_values` (sin equivalente directo en v3) se reemplazó por un shim local minimo en los dos archivos que lo usaban (`ingesta.py`, `migrar_historico_csv.py`), probado contra una tabla temporal real incluyendo `ON CONFLICT`. Probado de punta a punta: conexión real, `dict_row` en `backend/main.py`, y el servidor completo levantado en un puerto de prueba respondiendo con datos reales antes de dar el cambio por cerrado.
 
 ### README
 
@@ -348,6 +348,10 @@ El dashboard ya no depende de que haya una terminal abierta corriendo `uvicorn` 
 
 - Aplicar (opcional, no urgente) el fix de `StandardOutput`/`StandardError` a los `.service` ya instalados en DEVELOP/MINI_LENOVO/QLYMSPROD01/QLYMSPROD02.
 - Un tercer cliente/sitio nuevo (si lo hay) quedaría con el mismo mecanismo ya probado en ambos escenarios (offline total y gateway online, incluido multi-compañero) contra producción real.
+
+### Sitio PEMEX (TAD_18_de_Marzo) — PoC cerrada (2026-10-11)
+
+`TAD_18_de_Marzo` (grupo `PEMEX`) se había agregado al inventario como servidor online normal (sin relay, alcanzable directo por ZeroTier). La PoC con PEMEX terminó y la máquina ya no pertenece a la red de ZeroTier correspondiente — se da de baja del inventario y de la base de datos (ver [`docker/DEVELOP_DESPLIEGUE.md`](docker/DEVELOP_DESPLIEGUE.md), Paso 0, que se ejecuta antes de migrar datos a DEVELOP para no arrastrar un sitio ya cerrado).
 
 ## 15. Validación end-to-end (opcional, recomendado)
 

@@ -1,0 +1,10 @@
+# Dependencias que necesita el contenedor (backend + dashboard estatico + ingesta).
+# Subconjunto curado del Pipfile raiz: excluye pythonnet (solo para el colector de
+# Windows en pausa, paso 4 del ROADMAP, y no corre dentro de este contenedor Linux).
+# Versiones fijadas a las mismas que ya trae Pipfile.lock, para reproducibilidad.
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+psycopg[binary]==3.3.6
+python-dotenv==1.2.4
+pyyaml==6.0.3
+paramiko==5.0.0

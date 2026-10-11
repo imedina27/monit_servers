@@ -1,0 +1,17 @@
+.git/
+.vscode/
+bkp/
+__pycache__/
+*.pyc
+*.log
+.env
+docker/.env
+inventario_servidores.yaml
+ingesta/pendientes_offline/
+colector_ubuntu/
+colector_ubuntu/lecturas/
+relay/
+relay/relay_entrante/
+db/
+scripts/
+Pipfile.lock

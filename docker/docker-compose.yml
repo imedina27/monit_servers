@@ -1,0 +1,66 @@
+# Prueba del paso 13 del ROADMAP (ver docker/PLAN_PRUEBA_DOCKER.md). Dos servicios nada mas:
+# Postgres + backend/dashboard/ingesta. Nada de scheduler (Ofelia) todavia -- eso se agrega
+# cuando esto se migre de verdad a DEVELOP.
+#
+# Variables (${DB_NAME}, etc.) se toman de docker/.env -- copiar docker/.env.example y
+# completar antes de levantar esto (docker compose las carga solo porque vive junto a este
+# archivo).
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: monit-servers-v2-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Solo se aplica la primera vez que el volumen "pgdata" se crea vacio.
+      - ../db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    networks:
+      - quantum-network
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: monit-servers-v2-backend
+    user: "1000:1000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      # Igual que hoy en produccion: loopback-only por defecto (backend/config.ini).
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ../inventario_servidores.yaml:/opt/quantumlabs/monit-servers-v2/inventario_servidores.yaml:ro
+      - ../ingesta/pendientes_offline:/opt/quantumlabs/monit-servers-v2/ingesta/pendientes_offline
+    # Fase 4 (opcional) del plan de prueba: permite que el contenedor llegue al host de la VM
+    # (donde corre el tunel SSH hacia los servidores reales via ZeroTier) por este nombre.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - postgres
+    networks:
+      - quantum-network
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+
+networks:
+  quantum-network:
+    driver: bridge
+
+volumes:
+  pgdata:
