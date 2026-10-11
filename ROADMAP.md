@@ -330,9 +330,12 @@ validación en paralelo. Ver "Después del corte" abajo, ya ejecutado.
   `docker/.env` real en DEVELOP, `chmod 600`, nunca horneado en la imagen.
 - ~~Instalar Docker + Docker Compose en DEVELOP.~~ Ya estaba instalado de antes (otros productos
   de Quantum ya corren ahí) — solo hizo falta agregar al usuario `imedina` al grupo `docker`.
-- **Scheduler Ofelia** (ingesta periódica dentro de Docker, sin tocar el systemd del host): sigue
-  sin implementarse — hoy la ingesta en DEVELOP se dispara a mano vía `POST
-  /api/ingesta/ejecutar`, igual que en la prueba de la VM.
+- ~~Scheduler Ofelia (ingesta periódica dentro de Docker, sin tocar el systemd del host).~~
+  Resuelto el 2026-10-11 — servicio `ofelia` agregado a `docker-compose.yml`, dispara `POST
+  /api/ingesta/ejecutar` dentro del contenedor `backend` cada hora en punto (`0 0 * * * *`) vía
+  `docker exec`, leyendo labels del propio servicio `backend`. Probado primero con un intervalo
+  corto (`@every 15s`) para confirmar el disparo real sin esperar una hora completa (dos
+  ejecuciones exitosas vistas en los logs de Ofelia), luego cambiado a la cadencia final.
 - ~~Explorar usar `psycopg` v3 en vez de `psycopg2-binary`.~~ Resuelto el 2026-10-10, al preparar la prueba de Docker (paso 13) — se confirmó primero que el bloqueo de la política de Control de Aplicaciones de Windows ya no aplica a `psycopg[binary]` v3 en esta máquina (instalación y conexión real probadas antes de tocar código), y se migraron los 5 archivos que usaban `psycopg2` (`backend/main.py`, `ingesta/ingesta.py`, `db/gestionar_servidor.py`, `db/migrar_historico_csv.py`, `db/restaurar.py`), el `Pipfile`/`Pipfile.lock` y `docker/requirements.txt`. `execute_values` (sin equivalente directo en v3) se reemplazó por un shim local minimo en los dos archivos que lo usaban (`ingesta.py`, `migrar_historico_csv.py`), probado contra una tabla temporal real incluyendo `ON CONFLICT`. Probado de punta a punta: conexión real, `dict_row` en `backend/main.py`, y el servidor completo levantado en un puerto de prueba respondiendo con datos reales antes de dar el cambio por cerrado.
 
 ### Después del corte ✅
@@ -350,7 +353,13 @@ validación en paralelo. Ver "Después del corte" abajo, ya ejecutado.
 
 ### README
 
-- Agregar sección de instalación vía Docker: cómo construir/levantar los contenedores en DEVELOP, variables de entorno necesarias, cómo aplicar `db/schema.sql` al contenedor de Postgres.
+- ~~Agregar sección de instalación vía Docker.~~ Resuelto el 2026-10-11 — Docker reemplaza al
+  método manual (`pipenv`/NSSM) como instalación principal en el `README.md`; el método viejo
+  queda documentado aparte como referencia histórica. También se actualizaron "Uso" (comandos
+  `docker compose`, Ofelia en vez de la tarea programada de Windows) y la "Estructura del
+  proyecto" (`docker/`, `scripts/cargar_offline_remoto.py`).
+
+**Paso 13 cerrado.**
 
 ## 14. Relay de datos para sitios offline / semi-offline
 
