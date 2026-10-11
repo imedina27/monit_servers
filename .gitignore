@@ -15,4 +15,5 @@ __pycache__/
 colector_ubuntu/lecturas/
 ingesta/pendientes_offline/
 relay/relay_entrante/
+relay/zips/
 bkp/
