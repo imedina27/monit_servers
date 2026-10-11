@@ -198,22 +198,39 @@ builds fallaban (`Temporary failure resolving`). Antes de construir nuestra imag
 2. `docker network ls` → confirmar que Compose va a crear su propia red con prefijo de proyecto,
    sin tocar la `quantum-network` ya existente de otro producto.
 
-### Paso 6 — Levantar Postgres y restaurar/migrar los datos reales
+### Paso 6 — Levantar Postgres y restaurar/migrar los datos reales ✅
 
 1. `docker compose up -d postgres` (desde `/opt/quantum/monit-servers-v2/docker/`).
 2. **Verificación**: `docker compose logs postgres` sin errores; `\dt` muestra las 13 tablas del
    esquema.
-3. Migrar los datos reales de producción (no un backup de prueba) — a definir si es restaurar el
-   último `bkp/Data_Base/*.sql` generado justo antes del corte, para minimizar la ventana sin
-   datos nuevos.
+3. Backup fresco de producción (`db/respaldar.py`, ya sin `TAD_18_de_Marzo`) restaurado —
+   123,419 lecturas, 11 servidores.
 
-### Paso 7 — Construir y levantar el backend
+**Bug encontrado y corregido (real, no de la VM)**: `postgres:18` cambió su layout a uno
+compatible con `pg_ctlcluster` ([docker-library/postgres#1259](https://github.com/docker-library/postgres/pull/1259))
+— montar el volumen en `/var/lib/postgresql/data` (lo que funcionaba con `postgres:16`, usado en
+la prueba de la VM) hace que el contenedor **aborte al iniciar** con un error claro. Corregido en
+`docker-compose.yml`: el volumen ahora monta en `/var/lib/postgresql` directo. No se detectó en la
+prueba de la VM porque ahí se usó `postgres:16` — se homologó a `postgres:18` justo antes de este
+despliegue (ver sección 2, punto 6) y el bug salió a la primera.
+
+### Paso 7 — Construir y levantar el backend ✅
 
 1. `docker compose up -d --build backend`.
 2. **Verificación**: `docker compose logs backend` sin tracebacks; `curl` a
-   `http://127.0.0.1:8000/api/servidores` (o la IP que se decida publicar) responde con datos
-   reales; revisar también `ls -la` dentro del contenedor en `ingesta/` para confirmar que
-   **no** se coló ningún archivo con permisos de `root` (el bug que sí nos pasó en la VM).
+   `http://127.0.0.1:8000/api/servidores` responde con datos reales; `ls -la` dentro del
+   contenedor en `ingesta/` confirma que no se coló ningún archivo con permisos de `root` (el
+   `git clone` limpio evitó el bug que sí nos pasó en la VM).
+
+**Detalle encontrado y corregido**: `ingesta/pendientes_offline/` no existe como carpeta en el
+repo (git no versiona carpetas vacías, y está en `.gitignore`) — al no existir en el host al
+hacer `docker compose up`, Docker la creó solo como bind mount, **con dueño `root:root`**. El
+contenedor corre como uid 1000 y no podría escribir ahí (necesario para que
+`recolectar_relay_gateway()` deposite los archivos que recolecta de los compañeros de
+`quantumdata`/`apiman-fase1`). Corregido con `chown -R imedina:imedina` sobre esa carpeta antes de
+probar la ingesta. A tener en cuenta para cualquier despliegue futuro desde un `git clone` limpio:
+crear esa carpeta con el dueño correcto *antes* del primer `docker compose up`, en vez de dejar
+que Docker la auto-cree.
 
 ### Paso 8 — Validar ingesta online real (sin túnel esta vez)
 
