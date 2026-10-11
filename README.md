@@ -426,8 +426,8 @@ Corre de tres formas:
 Revisa `ingesta/ingesta.log` (dentro del contenedor, o `docker compose logs backend`) para ver qué se cargó.
 
 > **Histórico**: antes de Docker, la ingesta corría también vía tarea programada de Windows
-> (`MonitServersV2_Ingesta`, instalada con `scripts/instalar_tarea_ingesta.ps1`) — se deshabilitó
-> el 2026-10-11 al migrar a Ofelia.
+> (`MonitServersV2_Ingesta`) — se deshabilitó el 2026-10-11 al migrar a Ofelia, y el script que la
+> instalaba (`scripts/instalar_tarea_ingesta.ps1`) se eliminó por no tener ya ningún uso.
 
 ### Migrar datos históricos del proyecto viejo (CSV ancho → formato largo)
 
@@ -537,8 +537,7 @@ Monit_Servers_V2/
 ├── scripts/
 │   ├── cargar_offline_remoto.py           ← sube un bundle offline por SFTP a un Docker remoto y dispara la ingesta
 │   ├── desempaquetar_offline.py           ← sube a DEVELOP los .zip que deja relay/empaquetar_offline.py
-│   ├── extraer_hardware.py                ← se corre EN el servidor Linux (sudo); genera <hostname>.json
-│   └── instalar_tarea_ingesta.ps1         ← historico (descontinuado, ver "Uso" -> Ingesta)
+│   └── extraer_hardware.py                ← se corre EN el servidor Linux (sudo); genera <hostname>.json
 │
 ├── inventario_servidores.yaml.example     ← plantilla versionada
 ├── inventario_servidores.yaml             ← (gitignored) datos reales de los servidores
