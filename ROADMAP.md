@@ -304,28 +304,25 @@ auto-crea como `root`); y el `uid:gid` del contenedor, que estaba hardcodeado a 
 `fgerard`/`fgv`, que comparten el grupo `quantum` como primario — se detectó que esto les daba
 acceso de lectura mutuo a sus homes, no se replicó ese patrón).
 
-### 🔴 Pendiente urgente — ingesta corriendo en paralelo (Windows + DEVELOP)
+### ~~🔴 Riesgo de ingesta en paralelo (Windows + DEVELOP)~~ Resuelto — corte hecho (2026-10-11)
 
-**Riesgo activo ahora mismo**: el flujo de ingesta en la máquina Windows (tarea programada) sigue
-corriendo normal, y DEVELOP ya tiene su propia ingesta funcional — ambos le apuntan a los mismos
-servidores, y la ingesta **borra los archivos de origen tras cargarlos**. Mientras los dos sigan
-activos, los datos nuevos se van a repartir entre dos bases de Postgres distintas según quién
-llegue primero a cada servidor (ya pasó en la prueba de hoy: DEVELOP cargó 23 archivos reales que
-la ingesta de Windows ya no va a encontrar). **Hay que decidir pronto**: ¿se apaga ya la ingesta
-de Windows (corte definitivo), o se deja un periodo corto de validación en paralelo con un plan
-claro de cuándo cortar?
+Se detectó el riesgo (ambos sistemas apuntando a los mismos servidores, la ingesta borra el
+archivo de origen tras cargarlo — ya había pasado: DEVELOP se quedó con 23 archivos reales que la
+ingesta de Windows ya no vio) y se decidió el corte definitivo de inmediato, sin periodo de
+validación en paralelo. Ver "Después del corte" abajo, ya ejecutado.
 
 ### Pendiente de decidir (migración a Docker)
 
-- **Script `cargar_offline_remoto.py`** (o similar): todavía no escrito. Corre en la máquina
-  Windows del usuario, sube el bundle de un servidor offline por SFTP directo a
-  `ingesta/pendientes_offline/<nombre_servidor>/` en DEVELOP (ruta que ya es un volumen de
-  Docker), y dispara `POST /api/ingesta/ejecutar` contra `http://192.168.192.205:8000` — sin
-  código nuevo en el backend, esa función ya procesa pendientes offline en la misma pasada que la
-  online (confirmado hoy: 98 archivos offline cargados en la misma llamada).
-  - Credenciales SFTP a decidir: ¿reusar las mismas SSH que ya tiene DEVELOP en
-    `inventario_servidores.yaml` (el propio usuario `imedina`, que ya tiene acceso), o un
-    usuario/acceso dedicado solo para esta tarea?
+- ~~Script `cargar_offline_remoto.py`.~~ Resuelto el 2026-10-11 —
+  [`scripts/cargar_offline_remoto.py`](scripts/cargar_offline_remoto.py): sube el bundle de un
+  servidor offline por SFTP directo a `ingesta/pendientes_offline/<nombre_servidor>/` en DEVELOP
+  (ruta que ya es un volumen de Docker) y dispara `POST /api/ingesta/ejecutar` contra
+  `http://192.168.192.205:8000` — sin código nuevo en el backend, esa función ya procesa
+  pendientes offline en la misma pasada que la online. Credenciales: reusa el acceso SSH del
+  propio usuario `imedina` (ya tiene permiso de escritura en `pendientes_offline/`), nuevas
+  variables `DEVELOP_*` en `.env`/`.env.example` — no se creó un usuario dedicado aparte.
+  Probado con una carpeta vacía (conexión SFTP y creación de carpeta remota reales, sin tocar
+  datos de producción).
 - ~~Confirmar que DEVELOP tiene salida de red hacia todos los demás servidores monitoreados.~~
   Confirmado el 2026-10-11 con la ingesta online real (ver arriba) — alcanza el segmento
   `192.168.192.x` donde viven todos los servidores activos restantes.
@@ -338,12 +335,18 @@ claro de cuándo cortar?
   /api/ingesta/ejecutar`, igual que en la prueba de la VM.
 - ~~Explorar usar `psycopg` v3 en vez de `psycopg2-binary`.~~ Resuelto el 2026-10-10, al preparar la prueba de Docker (paso 13) — se confirmó primero que el bloqueo de la política de Control de Aplicaciones de Windows ya no aplica a `psycopg[binary]` v3 en esta máquina (instalación y conexión real probadas antes de tocar código), y se migraron los 5 archivos que usaban `psycopg2` (`backend/main.py`, `ingesta/ingesta.py`, `db/gestionar_servidor.py`, `db/migrar_historico_csv.py`, `db/restaurar.py`), el `Pipfile`/`Pipfile.lock` y `docker/requirements.txt`. `execute_values` (sin equivalente directo en v3) se reemplazó por un shim local minimo en los dos archivos que lo usaban (`ingesta.py`, `migrar_historico_csv.py`), probado contra una tabla temporal real incluyendo `ON CONFLICT`. Probado de punta a punta: conexión real, `dict_row` en `backend/main.py`, y el servidor completo levantado en un puerto de prueba respondiendo con datos reales antes de dar el cambio por cerrado.
 
-### Después del corte (una vez decidido apagar Windows)
+### Después del corte ✅
 
-- Apagar el servicio NSSM del backend y la tarea programada de ingesta en la máquina Windows.
+- ~~Apagar el servicio NSSM del backend y la tarea programada de ingesta en la máquina
+  Windows.~~ Hecho el 2026-10-11: servicio `MonitServersV2_Backend` eliminado por completo
+  (`sc.exe delete`), tarea programada `MonitServersV2_Ingesta` deshabilitada. Confirmado que nada
+  sigue escuchando en el puerto 8000 local.
 - Reapuntar cualquier acceso que la gente use hoy (archivo hosts, accesos directos) a
-  `http://192.168.192.205:8000`.
-- Confirmar que no quede ningún proceso en Windows escribiendo a la base de datos vieja.
+  `http://192.168.192.205:8000` — pendiente, depende de quién más tenga configurado un acceso
+  directo a la máquina Windows.
+- Confirmar que no quede ningún proceso en Windows escribiendo a la base de datos vieja — con el
+  servicio y la tarea eliminados, no debería quedar ninguno, pero vale la pena un vistazo después
+  de unos días.
 
 ### README
 
