@@ -421,10 +421,11 @@ validación en paralelo. Ver "Después del corte" abajo, ya ejecutado.
   instalaron después de corregir la plantilla). Solo `DEVELOP` y `MINI_LENOVO` tenían las líneas
   viejas — corregido en ambos (mismo comentario explicativo que ya tenía la plantilla), con
   `daemon-reload` + `restart`, confirmado `active` en los dos tras el reinicio.
-  `QLYMSPROD01`/`QLYMSPROD02` (AbInBev): se dejaron instrucciones + archivos `.service` ya
-  personalizados para aplicarlo en la próxima visita al sitio (sitio 100% offline, sin alcance de
-  red desde aquí) — **estado de ese fix en específico pendiente de confirmar** (ver nota de
-  actualización del colector, abajo, que sí se confirmó aplicada).
+  `QLYMSPROD01`/`QLYMSPROD02` (AbInBev): aplicado en sitio el 2026-10-11, en la misma visita que
+  la actualización del colector (ver abajo) — se sustituyeron los `.service` completos ya
+  personalizados (en vez de editar línea por línea) por los que llevó el usuario, confirmado por
+  él mismo. Con esto, **los 11 servidores con colector/relay instalado ya tienen el fix** — no
+  queda ninguno pendiente.
 - ~~Colector desactualizado en `QLYMSPROD01`/`QLYMSPROD02` (solo reportaba temperatura).~~
   Actualizado en sitio el 2026-10-11 — confirmado con datos reales: el bundle traído del sitio
   (`relay_AbInBev.zip`, cargado con `scripts/desempaquetar_offline.py`) ya incluye los primeros
