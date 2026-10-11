@@ -22,7 +22,7 @@ quien no siguió el trabajo commit por commit).
 ## Contexto / decisiones ya tomadas
 
 - **Escala**: 15-20 servidores, mezcla de Ubuntu y Windows.
-- **Base de datos**: PostgreSQL (ya instalado en la máquina del usuario). Se descartó SQLite por el volumen de servidores.
+- **Base de datos**: PostgreSQL, containerizado con Docker desde el 2026-10-11 (antes corría nativo en la máquina Windows del usuario — ver sección de instalación). Se descartó SQLite por el volumen de servidores.
 - **Riesgo técnico principal**: lectura de temperatura en Windows — WMI (`MSAcpi_ThermalZoneTemperature`) no es confiable en hardware moderno; se usará **LibreHardwareMonitorLib** (requiere permisos de administrador).
 
 ## Arquitectura (resumen)
@@ -228,9 +228,104 @@ Revisa `relay.log`: debe mostrar `Recolectado: <archivo>` por cada compañero co
 
 En pausa — ver [ROADMAP.md](ROADMAP.md), paso 4.
 
-### Backend + Dashboard (en la máquina central)
+### Backend + Dashboard + Ingesta (Docker — método actual, desde el 2026-10-11)
 
-#### Requisitos previos (backend + dashboard)
+Postgres, backend/dashboard e ingesta corren en contenedores (`docker/`), con un cuarto servicio
+(Ofelia) que dispara la ingesta sola cada hora. Es el método real en producción hoy (DEVELOP);
+reemplaza al método manual con `pipenv`/NSSM que queda documentado más abajo como referencia
+histórica, por si hiciera falta correr el backend fuera de Docker en algún escenario puntual.
+
+#### Requisitos previos (Docker)
+
+- Docker Engine + el plugin `docker compose` instalados en el servidor destino.
+- El usuario que va a correr los contenedores debe pertenecer al grupo `docker` del sistema
+  (`sudo usermod -aG docker <usuario>`, cerrar sesión y volver a entrar).
+
+#### Paso 1 — Clonar el repositorio
+
+```bash
+git clone https://github.com/imedina27/monit_servers.git
+cd monit_servers
+```
+
+#### Paso 2 — Configurar credenciales (`docker/.env`)
+
+```bash
+cp docker/.env.example docker/.env
+```
+
+Completa, además de `DB_NAME`/`DB_USER`/`DB_PASSWORD`:
+
+- `HOST_UID`/`HOST_GID`: el uid:gid real (`id <usuario>`) del usuario que va a correr los
+  contenedores en **este** servidor. Si no coincide exacto, el contenedor no puede leer
+  `inventario_servidores.yaml` ni el resto de archivos montados (permission denied), aunque el
+  build haya salido bien — no es universal asumir 1000 (el de `quantum` en la mayoría de los
+  servidores Quantum), una cuenta personal puede tener otro uid asignado por el sistema.
+- `BIND_IP` (opcional): una IP real de este host (ej. la de ZeroTier) para publicar el dashboard
+  más allá de `127.0.0.1` y que el resto del equipo lo vea. Nunca `0.0.0.0` — ver la nota de
+  seguridad en [`docker/CONVENCIONES_QUANTUM.md`](docker/CONVENCIONES_QUANTUM.md) sobre por qué
+  `ufw`/`iptables` no filtra puertos publicados por Docker.
+
+#### Paso 3 — Configurar el inventario de servidores
+
+```bash
+cp inventario_servidores.yaml.example inventario_servidores.yaml
+chmod 600 inventario_servidores.yaml
+```
+
+Completa ahí los servidores reales (ver paso 5 de la instalación del colector Ubuntu, arriba). El campo `grupo` (ej. `Quantum` o `AbInBev/Zacatecas`) define dónde aparece cada servidor en el árbol del dashboard — la ingesta crea los niveles que falten automáticamente. `chmod 600` porque trae contraseñas reales de los servidores monitoreados.
+
+#### Paso 4 — Levantar Postgres
+
+```bash
+cd docker
+docker compose up -d postgres
+```
+
+Aplica [`db/schema.sql`](db/schema.sql) solo la primera vez (cuando el volumen `pgdata` se crea vacío). Si ya existen datos que migrar, restaura un backup aquí:
+
+```bash
+docker compose exec -T postgres psql -U <usuario> -d <nombre_db> < respaldo.sql
+```
+
+#### Paso 5 — Construir y levantar el backend
+
+```bash
+docker compose up -d --build backend
+```
+
+Abre `http://<IP_publicada>:8000/` en el navegador (o `http://127.0.0.1:8000/` si no configuraste `BIND_IP`) — ahí mismo se sirve el dashboard.
+
+#### Ingesta periódica automática (Ofelia)
+
+Ya viene integrada en el mismo `docker compose up` — un tercer servicio (`ofelia`, ver
+`docker-compose.yml`) dispara `POST /api/ingesta/ejecutar` dentro del contenedor `backend` cada
+hora en punto, leyendo labels del propio servicio. No toca el systemd del host; no hace falta
+configurar nada aparte.
+
+#### (Opcional) Umbrales del semáforo y hardware
+
+Los umbrales de temperatura (verde/ámbar/rojo) y el hardware (chasis + garantia, CPU/GPU, RAM total + DIMMs, discos, RAID, solo informativo para el dashboard) viven en Postgres, no en archivos — ver "Administrar un servidor" más abajo. Un servidor sin umbral propio usa el default genérico (`UMBRALES_DEFAULT` en `backend/main.py`); un servidor sin hardware cargado simplemente no muestra esa info en el dashboard.
+
+El dashboard también muestra el **uso de disco** por punto de montaje (ej. `/`, `/home`), agrupado por volumen/disco físico, con el mismo semáforo verde/ámbar/rojo (`UMBRAL_DISCO` en `backend/main.py`, 70%/90%, igual para todos los servidores). El colector lo lee de `/proc/mounts` (filtrando `tmpfs`/`overlay`/etc. con una lista blanca de sistemas de archivos reales) y lo guarda en un archivo `disco_<fecha>.csv` aparte de `lecturas_<fecha>.csv` — la ingesta distingue el tipo de archivo por su nombre y carga a la tabla `uso_disco` (serie de tiempo, hasta 1 año). El dashboard trae un **slider de fecha** debajo de las barras para navegar ese histórico — reutiliza los mismos chips "Por hora/día/mes" que ya controlan la gráfica de temperatura, un solo control para las dos cosas.
+
+#### Carga offline desde otra máquina
+
+Si necesitas subir un bundle offline sin entrar por SSH al servidor donde corre Docker, usa
+[`scripts/cargar_offline_remoto.py`](scripts/cargar_offline_remoto.py) — sube los `.csv` por SFTP
+y dispara la ingesta en un solo paso (variables `DEVELOP_*` en `.env.example`).
+
+> Para el paso a paso completo de un despliegue real (incluyendo los bugs encontrados al correr
+> contra un host compartido con otros productos) ver
+> [`docker/DEVELOP_DESPLIEGUE.md`](docker/DEVELOP_DESPLIEGUE.md) y
+> [`docker/CONVENCIONES_QUANTUM.md`](docker/CONVENCIONES_QUANTUM.md).
+
+### Backend + Dashboard — método histórico (sin Docker, descontinuado)
+
+> Ya no se usa en producción (reemplazado por Docker arriba) — queda documentado por si hace
+> falta correr el backend directo en una máquina sin Docker.
+
+#### Requisitos previos
 
 - Python 3.14 y `pipenv` instalados.
 - PostgreSQL ya instalado y accesible desde esta máquina.
@@ -271,15 +366,9 @@ psql -h localhost -U tu_usuario -d monit_srv -f db/schema.sql
 copy inventario_servidores.yaml.example inventario_servidores.yaml
 ```
 
-Completa ahí los servidores reales (ver paso 5 de la instalación del colector Ubuntu, arriba). El campo `grupo` (ej. `Quantum` o `AbInBev/Zacatecas`) define dónde aparece cada servidor en el árbol del dashboard — la ingesta crea los niveles que falten automáticamente.
+Completa ahí los servidores reales (ver paso 5 de la instalación del colector Ubuntu, arriba).
 
-#### Paso 5 — (Opcional) Umbrales del semáforo y hardware
-
-Los umbrales de temperatura (verde/ámbar/rojo) y el hardware (chasis + garantia, CPU/GPU, RAM total + DIMMs, discos, RAID, solo informativo para el dashboard) viven en Postgres, no en archivos — ver "Administrar un servidor" más abajo. Un servidor sin umbral propio usa el default genérico (`UMBRALES_DEFAULT` en `backend/main.py`); un servidor sin hardware cargado simplemente no muestra esa info en el dashboard.
-
-El dashboard también muestra el **uso de disco** por punto de montaje (ej. `/`, `/home`), agrupado por volumen/disco físico, con el mismo semáforo verde/ámbar/rojo (`UMBRAL_DISCO` en `backend/main.py`, 70%/90%, igual para todos los servidores). El colector lo lee de `/proc/mounts` (filtrando `tmpfs`/`overlay`/etc. con una lista blanca de sistemas de archivos reales) y lo guarda en un archivo `disco_<fecha>.csv` aparte de `lecturas_<fecha>.csv` — la ingesta distingue el tipo de archivo por su nombre y carga a la tabla `uso_disco` (serie de tiempo, hasta 1 año). El dashboard trae un **slider de fecha** debajo de las barras para navegar ese histórico — reutiliza los mismos chips "Por hora/día/mes" que ya controlan la gráfica de temperatura, un solo control para las dos cosas.
-
-#### Paso 6 — Levantar el servidor
+#### Paso 5 — Levantar el servidor
 
 ```bash
 pipenv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
@@ -291,67 +380,54 @@ Abre `http://127.0.0.1:8000/` en el navegador — ahí mismo se sirve el dashboa
 
 ## Uso
 
-### Backend (servicio de Windows)
+### Backend (Docker)
 
-El backend corre como servicio de Windows (`MonitServersV2_Backend`, instalado con [NSSM](https://nssm.cc/)) — arranca solo con la máquina, se reinicia solo si falla.
+Desde el 2026-10-11, `postgres` + `backend` + `ofelia` corren como servicios de Docker Compose
+(`docker/docker-compose.yml`), con `restart: always` — vuelven solos si el host se reinicia o si
+un contenedor falla. Comandos útiles, parados en `docker/`:
 
-#### Instalación (una sola vez, PowerShell como Administrador)
-
-1. Descarga [NSSM](https://nssm.cc/download) y copia `win64\nssm.exe` a `%LOCALAPPDATA%\Programs\nssm\nssm.exe`.
-2. Parado en la carpeta raíz del proyecto, corre:
-
-```powershell
-$nssm = "$env:LOCALAPPDATA\Programs\nssm\nssm.exe"
-$servicio = "MonitServersV2_Backend"
-$proyecto = (Get-Location).Path
-$venvDir = Get-ChildItem -Path "$env:USERPROFILE\.virtualenvs" -Directory -Filter "Monit_Servers_V2-*" | Select-Object -First 1
-$python = Join-Path $venvDir.FullName "Scripts\python.exe"
-
-& $nssm install $servicio $python
-& $nssm set $servicio AppParameters "-m uvicorn backend.main:app --host 127.0.0.1 --port 8000"
-& $nssm set $servicio AppDirectory $proyecto
-& $nssm set $servicio AppStdout "$proyecto\backend\service.log"
-& $nssm set $servicio AppStderr "$proyecto\backend\service.log"
-& $nssm set $servicio Start SERVICE_AUTO_START
-& $nssm set $servicio AppRestartDelay 5000
-& $nssm start $servicio
-& $nssm status $servicio
+```bash
+docker compose ps                        # estado de los 3 servicios
+docker compose logs backend --tail 50    # logs del backend (tracebacks, requests)
+docker compose logs ofelia                # confirmar que la ingesta automatica disparo bien
+docker compose up -d --build backend     # reconstruir y reiniciar tras actualizar codigo
+docker compose restart backend           # reiniciar sin reconstruir
+docker compose down && docker compose up -d   # reinicio completo del stack (los datos de
+                                               # Postgres persisten en el volumen "pgdata")
 ```
 
-Debería terminar con `SERVICE_RUNNING`.
+El botón "Actualizar" del dashboard (`POST /api/ingesta/ejecutar`) sigue funcionando igual que
+antes, además del disparo automático cada hora de Ofelia.
 
-#### Comandos útiles (PowerShell como Administrador)
+#### Histórico: servicio de Windows con NSSM (descontinuado)
 
-```powershell
-Get-Service -Name "MonitServersV2_Backend"
-Restart-Service -Name "MonitServersV2_Backend"   # despues de actualizar backend/*.py
-```
-
-Logs en `backend/service.log`.
+> Hasta el 2026-10-11 el backend corrió como servicio de Windows (`MonitServersV2_Backend`,
+> instalado con [NSSM](https://nssm.cc/)) en la máquina del usuario. Se dio de baja (`sc.exe
+> delete`) al migrar a Docker en DEVELOP — queda esta nota solo como referencia histórica, no
+> como instrucción de instalación vigente.
 
 ### Ingesta
 
 Corre de tres formas:
 
-1. **Automática al iniciar sesión** — tarea programada de Windows (`MonitServersV2_Ingesta`, disparador "al iniciar sesión"). Para crearla (o recrearla si cambió algo), PowerShell como Administrador:
+1. **Automática cada hora** — el servicio `ofelia` del `docker-compose.yml` dispara
+   `POST /api/ingesta/ejecutar` dentro del contenedor `backend`, sin tocar systemd/cron del host.
+   Ya viene integrado con `docker compose up -d`, no hace falta configurar nada aparte. Verificar
+   con `docker compose logs ofelia`.
+2. **Bajo demanda** — botón "Actualizar" en el dashboard (llama al mismo endpoint, y refresca la
+   página al terminar), o `scripts/cargar_offline_remoto.py` desde otra máquina (ver "Instalación").
+3. **Manual**, para cuando quieras correrla fuera de las otras dos:
 
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts\instalar_tarea_ingesta.ps1
+   ```bash
+   docker compose exec backend python ingesta/ingesta.py   # dentro de Docker
+   pipenv run python ingesta/ingesta.py                     # metodo historico sin Docker
    ```
 
-   El script ([`scripts/instalar_tarea_ingesta.ps1`](scripts/instalar_tarea_ingesta.ps1)) detecta solo la ruta del virtualenv — no hay que editar rutas a mano. Es seguro volver a correrlo: si la tarea ya existe, la reemplaza.
+Revisa `ingesta/ingesta.log` (dentro del contenedor, o `docker compose logs backend`) para ver qué se cargó.
 
-2. **Bajo demanda** — botón "Actualizar" en el dashboard (llama a `POST /api/ingesta/ejecutar`, que corre la ingesta en el mismo proceso del backend y refresca la página al terminar).
-
-3. **Manual** (ver abajo), para cuando quieras correrla fuera de las otras dos.
-
-También se puede correr manualmente en cualquier momento:
-
-```bash
-pipenv run python ingesta/ingesta.py
-```
-
-Revisa `ingesta/ingesta.log` para ver qué se cargó.
+> **Histórico**: antes de Docker, la ingesta corría también vía tarea programada de Windows
+> (`MonitServersV2_Ingesta`, instalada con `scripts/instalar_tarea_ingesta.ps1`) — se deshabilitó
+> el 2026-10-11 al migrar a Ofelia.
 
 ### Migrar datos históricos del proyecto viejo (CSV ancho → formato largo)
 
@@ -417,7 +493,7 @@ Monit_Servers_V2/
 │   ├── config.ini
 │   └── monit_servers_v2.service
 │
-├── ingesta/                               ← Corre en la maquina central (Windows)
+├── ingesta/                               ← Corre dentro del contenedor "backend" (Docker)
 │   ├── ingesta.py
 │   ├── config.ini
 │   └── pendientes_offline/                ← (gitignored) archivos offline manuales, por servidor
@@ -447,14 +523,25 @@ Monit_Servers_V2/
 │
 ├── bkp/Data_Base/                         ← (gitignored) respaldos .sql generados por respaldar.py
 │
+├── docker/                                ← Postgres + backend + ofelia (ver "Instalacion")
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── requirements.txt
+│   ├── .env.example                        ← plantilla versionada
+│   ├── .env                                ← (gitignored) credenciales/uid/BIND_IP de este despliegue
+│   ├── CONVENCIONES_QUANTUM.md             ← convenciones Docker de Quantum, de donde salio este patron
+│   ├── PLAN_PRUEBA_DOCKER.md               ← prueba contra una VM, ya cerrada
+│   └── DEVELOP_DESPLIEGUE.md               ← despliegue real contra DEVELOP, paso a paso
+│
 ├── scripts/
-│   ├── instalar_tarea_ingesta.ps1         ← crea la tarea programada de la ingesta
-│   └── extraer_hardware.py                ← se corre EN el servidor Linux (sudo); genera <hostname>.json
+│   ├── cargar_offline_remoto.py           ← sube un bundle offline por SFTP a un Docker remoto y dispara la ingesta
+│   ├── extraer_hardware.py                ← se corre EN el servidor Linux (sudo); genera <hostname>.json
+│   └── instalar_tarea_ingesta.ps1         ← historico (descontinuado, ver "Uso" -> Ingesta)
 │
 ├── inventario_servidores.yaml.example     ← plantilla versionada
 ├── inventario_servidores.yaml             ← (gitignored) datos reales de los servidores
 ├── .env.example                           ← plantilla versionada
-├── .env                                   ← (gitignored) credenciales de Postgres
+├── .env                                   ← (gitignored) credenciales de Postgres y de scripts/cargar_offline_remoto.py
 │
 ├── Pipfile / Pipfile.lock
 ├── README.md
