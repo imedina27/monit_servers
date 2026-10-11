@@ -49,8 +49,11 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
     ports:
-      # Igual que hoy en produccion: loopback-only por defecto (backend/config.ini).
-      - "127.0.0.1:8000:8000"
+      # Loopback-only por defecto (igual que backend/config.ini). Definir BIND_IP en docker/.env
+      # con una IP real del host (ej. la de ZeroTier) para que el dashboard sea alcanzable por el
+      # resto del equipo -- mismo criterio que BIND_EXTRA_IPS en las convenciones de Quantum
+      # (ver docker/CONVENCIONES_QUANTUM.md): nunca 0.0.0.0, siempre una IP literal conocida.
+      - "${BIND_IP:-127.0.0.1}:8000:8000"
     volumes:
       - ../inventario_servidores.yaml:/opt/quantumlabs/monit-servers-v2/inventario_servidores.yaml:ro
       - ../ingesta/pendientes_offline:/opt/quantumlabs/monit-servers-v2/ingesta/pendientes_offline
