@@ -420,10 +420,17 @@ validación en paralelo. Ver "Después del corte" abajo, ya ejecutado.
   lista original: `apiman-fase1/2/3` y `quantumdata`/`colima00/01/02` **ya tenían el fix** (se
   instalaron después de corregir la plantilla). Solo `DEVELOP` y `MINI_LENOVO` tenían las líneas
   viejas — corregido en ambos (mismo comentario explicativo que ya tenía la plantilla), con
-  `daemon-reload` + `restart`, confirmado `active` en los dos tras el reinicio. `QLYMSPROD01`/
-  `QLYMSPROD02` (AbInBev) siguen sin poder verificarse — sitio 100% offline, sin alcance de red
-  desde aquí; casi seguro que aún tienen las líneas viejas (se instalaron antes del fix), pendiente
-  de aplicar cuando haya acceso físico/manual al sitio.
+  `daemon-reload` + `restart`, confirmado `active` en los dos tras el reinicio.
+  `QLYMSPROD01`/`QLYMSPROD02` (AbInBev): se dejaron instrucciones + archivos `.service` ya
+  personalizados para aplicarlo en la próxima visita al sitio (sitio 100% offline, sin alcance de
+  red desde aquí) — **estado de ese fix en específico pendiente de confirmar** (ver nota de
+  actualización del colector, abajo, que sí se confirmó aplicada).
+- ~~Colector desactualizado en `QLYMSPROD01`/`QLYMSPROD02` (solo reportaba temperatura).~~
+  Actualizado en sitio el 2026-10-11 — confirmado con datos reales: el bundle traído del sitio
+  (`relay_AbInBev.zip`, cargado con `scripts/desempaquetar_offline.py`) ya incluye los primeros
+  `disco_*.csv` reales de `QLYMSPROD01` (18 registros de uso de disco en Postgres, su primer dato
+  de este tipo). 106 archivos en total cargados (55 de `QLYMSPROD01` + 51 de `QLYMSPROD02`,
+  lecturas del 9 al 11 de octubre).
 - Un tercer cliente/sitio nuevo (si lo hay) quedaría con el mismo mecanismo ya probado en ambos escenarios (offline total y gateway online, incluido multi-compañero) contra producción real.
 
 ### Sitio PEMEX (TAD_18_de_Marzo) — PoC cerrada (2026-10-11)
