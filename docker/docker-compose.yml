@@ -1,6 +1,4 @@
-# Prueba del paso 13 del ROADMAP (ver docker/PLAN_PRUEBA_DOCKER.md). Dos servicios nada mas:
-# Postgres + backend/dashboard/ingesta. Nada de scheduler (Ofelia) todavia -- eso se agrega
-# cuando esto se migre de verdad a DEVELOP.
+# Postgres + backend/dashboard/ingesta + Ofelia (scheduler de la ingesta periodica, ver abajo).
 #
 # Variables (${DB_NAME}, etc.) se toman de docker/.env -- copiar docker/.env.example y
 # completar antes de levantar esto (docker compose las carga solo porque vive junto a este
@@ -42,6 +40,14 @@ services:
     # coincide exacto con el dueno real, el contenedor no puede leer esos archivos (permission
     # denied), aunque el build haya salido bien.
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    # Ofelia (abajo) lee estas labels para disparar la ingesta sola, cada hora en punto -- sin
+    # tocar el systemd del host (decision del paso 13 del ROADMAP). "curl" ya viene en la imagen
+    # (ver Dockerfile). "-sf" calla la salida normal y hace que un 4xx/5xx cuente como fallo para
+    # que quede marcado como tal en los logs de Ofelia.
+    labels:
+      ofelia.enabled: "true"
+      ofelia.job-exec.ingesta.schedule: "0 0 * * * *"
+      ofelia.job-exec.ingesta.command: "curl -sf -X POST http://localhost:8000/api/ingesta/ejecutar"
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -63,6 +69,27 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - postgres
+    networks:
+      - quantum-network
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+
+  # Dispara jobs dentro de otros contenedores por horario, leyendo las labels "ofelia.*" de ellos
+  # -- nada de systemd/cron en el host (DEVELOP es compartido con ~23 contenedores de otros
+  # productos). Necesita el socket de Docker para poder hacer "docker exec" en el contenedor
+  # objetivo; montado ":ro" como higiene minima (no evita operaciones via la API, solo que se
+  # reemplace/borre el archivo del socket).
+  ofelia:
+    image: mcuadros/ofelia:latest
+    container_name: monit-servers-v2-ofelia
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - backend
     networks:
       - quantum-network
     restart: always
