@@ -280,13 +280,70 @@ El dashboard ya no depende de que haya una terminal abierta corriendo `uvicorn` 
   2. Dispara la carga llamando al mismo endpoint que ya usa el botón "Actualizar" del dashboard (`POST /api/ingesta/ejecutar`) — sin código nuevo en el backend, esa función ya procesa pendientes offline en la misma pasada que la ingesta online.
   3. Imprime en la terminal el resumen que ya devuelve ese endpoint (cargados/omitidos), sin necesidad de abrir el navegador.
 
+### Implementado y probado ✅ (despliegue real en DEVELOP, 2026-10-11)
+
+Los 9 pasos de [`docker/DEVELOP_DESPLIEGUE.md`](docker/DEVELOP_DESPLIEGUE.md) ejecutados contra
+DEVELOP real (no una VM de prueba): usuario `imedina` dedicado (ver abajo), stack en
+`/opt/quantum/monit-servers-v2` vía `git clone`, Postgres 18 (homologado con la versión real de
+producción) con los datos reales restaurados, backend construido y corriendo, **ingesta online
+real confirmada** (23 archivos online + 98 vía relay/gateway, sin ningún túnel — ZeroTier directo
+de DEVELOP), dashboard publicado en `http://192.168.192.205:8000` para todo el equipo
+(`BIND_IP` en `docker/.env`, mismo criterio que `BIND_EXTRA_IPS` de Quantum). Persistencia de
+datos y reinicio de contenedores verificados sin afectar a los ~23 contenedores de otros
+productos que ya corrían en ese mismo host.
+
+Bugs reales encontrados y corregidos en el camino (no se habían visto en la prueba de la VM):
+volumen de `postgres:18` (cambió de layout respecto a 16, ver
+[docker-library/postgres#1259](https://github.com/docker-library/postgres/pull/1259)); permisos
+de `ingesta/pendientes_offline/` al no existir esa carpeta en un `git clone` limpio (Docker la
+auto-crea como `root`); y el `uid:gid` del contenedor, que estaba hardcodeado a `1000` (el de
+`quantum` en todos los servidores conocidos) y no generalizaba a una cuenta personal como
+`imedina` (uid 1007) — ahora configurable vía `HOST_UID`/`HOST_GID` en `docker/.env`.
+
+**Usuario `imedina` en DEVELOP**: creado con su propio grupo exclusivo (a diferencia de
+`fgerard`/`fgv`, que comparten el grupo `quantum` como primario — se detectó que esto les daba
+acceso de lectura mutuo a sus homes, no se replicó ese patrón).
+
+### 🔴 Pendiente urgente — ingesta corriendo en paralelo (Windows + DEVELOP)
+
+**Riesgo activo ahora mismo**: el flujo de ingesta en la máquina Windows (tarea programada) sigue
+corriendo normal, y DEVELOP ya tiene su propia ingesta funcional — ambos le apuntan a los mismos
+servidores, y la ingesta **borra los archivos de origen tras cargarlos**. Mientras los dos sigan
+activos, los datos nuevos se van a repartir entre dos bases de Postgres distintas según quién
+llegue primero a cada servidor (ya pasó en la prueba de hoy: DEVELOP cargó 23 archivos reales que
+la ingesta de Windows ya no va a encontrar). **Hay que decidir pronto**: ¿se apaga ya la ingesta
+de Windows (corte definitivo), o se deja un periodo corto de validación en paralelo con un plan
+claro de cuándo cortar?
+
 ### Pendiente de decidir (migración a Docker)
 
-- Credenciales SFTP que usará el nuevo script de carga offline remota: ¿se reutilizan las mismas credenciales SSH que ya tiene DEVELOP en `inventario_servidores.yaml`, o se crea un usuario/acceso dedicado solo para esta tarea?
-- Confirmar que DEVELOP tiene salida de red hacia todos los demás servidores monitoreados (hoy esa salida es desde la máquina Windows); para DEVELOP mismo ya no haría falta SSH a sí mismo si se lee directo del disco local.
-- Manejo de secretos (`.env`) vía archivo de entorno de Docker Compose, nunca horneados en la imagen.
-- Instalar Docker + Docker Compose en DEVELOP (Ubuntu Server — sin las restricciones de Control de Aplicaciones que sí tiene la máquina Windows).
+- **Script `cargar_offline_remoto.py`** (o similar): todavía no escrito. Corre en la máquina
+  Windows del usuario, sube el bundle de un servidor offline por SFTP directo a
+  `ingesta/pendientes_offline/<nombre_servidor>/` en DEVELOP (ruta que ya es un volumen de
+  Docker), y dispara `POST /api/ingesta/ejecutar` contra `http://192.168.192.205:8000` — sin
+  código nuevo en el backend, esa función ya procesa pendientes offline en la misma pasada que la
+  online (confirmado hoy: 98 archivos offline cargados en la misma llamada).
+  - Credenciales SFTP a decidir: ¿reusar las mismas SSH que ya tiene DEVELOP en
+    `inventario_servidores.yaml` (el propio usuario `imedina`, que ya tiene acceso), o un
+    usuario/acceso dedicado solo para esta tarea?
+- ~~Confirmar que DEVELOP tiene salida de red hacia todos los demás servidores monitoreados.~~
+  Confirmado el 2026-10-11 con la ingesta online real (ver arriba) — alcanza el segmento
+  `192.168.192.x` donde viven todos los servidores activos restantes.
+- ~~Manejo de secretos (`.env`) vía archivo de entorno de Docker Compose.~~ Resuelto —
+  `docker/.env` real en DEVELOP, `chmod 600`, nunca horneado en la imagen.
+- ~~Instalar Docker + Docker Compose en DEVELOP.~~ Ya estaba instalado de antes (otros productos
+  de Quantum ya corren ahí) — solo hizo falta agregar al usuario `imedina` al grupo `docker`.
+- **Scheduler Ofelia** (ingesta periódica dentro de Docker, sin tocar el systemd del host): sigue
+  sin implementarse — hoy la ingesta en DEVELOP se dispara a mano vía `POST
+  /api/ingesta/ejecutar`, igual que en la prueba de la VM.
 - ~~Explorar usar `psycopg` v3 en vez de `psycopg2-binary`.~~ Resuelto el 2026-10-10, al preparar la prueba de Docker (paso 13) — se confirmó primero que el bloqueo de la política de Control de Aplicaciones de Windows ya no aplica a `psycopg[binary]` v3 en esta máquina (instalación y conexión real probadas antes de tocar código), y se migraron los 5 archivos que usaban `psycopg2` (`backend/main.py`, `ingesta/ingesta.py`, `db/gestionar_servidor.py`, `db/migrar_historico_csv.py`, `db/restaurar.py`), el `Pipfile`/`Pipfile.lock` y `docker/requirements.txt`. `execute_values` (sin equivalente directo en v3) se reemplazó por un shim local minimo en los dos archivos que lo usaban (`ingesta.py`, `migrar_historico_csv.py`), probado contra una tabla temporal real incluyendo `ON CONFLICT`. Probado de punta a punta: conexión real, `dict_row` en `backend/main.py`, y el servidor completo levantado en un puerto de prueba respondiendo con datos reales antes de dar el cambio por cerrado.
+
+### Después del corte (una vez decidido apagar Windows)
+
+- Apagar el servicio NSSM del backend y la tarea programada de ingesta en la máquina Windows.
+- Reapuntar cualquier acceso que la gente use hoy (archivo hosts, accesos directos) a
+  `http://192.168.192.205:8000`.
+- Confirmar que no quede ningún proceso en Windows escribiendo a la base de datos vieja.
 
 ### README
 
