@@ -3,6 +3,68 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
 
+## [v2.0.0] - 2026-10-11
+
+Migración del stack central (Postgres + backend/dashboard + ingesta) de la máquina Windows
+del usuario a **DEVELOP** (Ubuntu Server), empaquetado con **Docker** — el cambio de
+infraestructura más grande desde el primer release. Además: uso de disco por punto de
+montaje, tercer sitio en operación (C5i/Colima), hardware/umbrales reales completados para
+todos los servidores conocidos, y varios scripts nuevos para sitios offline.
+
+### Added
+
+- **Docker**: `docker/Dockerfile` + `docker-compose.yml` para Postgres + backend/dashboard +
+  ingesta, siguiendo las convenciones de Quantum (`docker/CONVENCIONES_QUANTUM.md`): usuario
+  real del host (no root), red dedicada, `host.docker.internal` vía `host-gateway`, exposición
+  de puertos conservadora por defecto (`BIND_IP`, loopback-only salvo que se configure otra IP).
+- **Scheduler Ofelia**: la ingesta corre sola cada hora dentro de Docker (`docker exec` vía
+  labels en `docker-compose.yml`), sin tocar systemd/cron del host.
+- **Uso de disco por volumen/punto de montaje** en el dashboard (paso 16): nueva tabla
+  `uso_disco`, colector agnóstico de LVM, slider de fecha para navegar hasta 1 año de histórico
+  reutilizando los mismos controles de agrupación de la gráfica de temperatura.
+- **Sitio C5i/Colima** (`quantumdata` + `colima00/01/02`) puesto en operación real — tercer
+  cliente con el mecanismo de relay/gateway, confirmado contra producción con múltiples
+  compañeros de un mismo gateway.
+- **`scripts/cargar_offline_remoto.py`**: sube un bundle de un servidor offline por SFTP
+  directo a DEVELOP y dispara la ingesta, sin entrar por SSH a mano.
+- **`relay/empaquetar_offline.py`** + **`scripts/desempaquetar_offline.py`**: empaquetan en un
+  solo `.zip` los datos de un sitio 100% offline (hub + compañeros) en el propio sitio, y lo
+  suben/descomprimen del lado de DEVELOP en un solo paso.
+- **Usuario dedicado `imedina`** en DEVELOP (servidor compartido con otros productos de
+  Quantum), con grupo primario exclusivo — a diferencia de otras cuentas del servidor que
+  comparten grupo y terminan con acceso de lectura mutuo a sus homes.
+- Hardware real (chasis/CPU/GPU/discos, verificado con `sudo`) y umbrales de temperatura
+  investigados por modelo real, completados para los últimos servidores que quedaban
+  pendientes (`QLYMSPROD01`/`QLYMSPROD02` de AbInBev, `MINI_LENOVO`).
+
+### Changed
+
+- **`psycopg2` → `psycopg` v3** en todo el proyecto (backend, ingesta, los 4 scripts de `db/`)
+  — el bloqueo de la política de Control de Aplicaciones de Windows que motivó usar v2
+  originalmente ya no aplica en esta máquina.
+- El dashboard pasa de ser accesible solo en la máquina Windows del usuario a publicarse en la
+  IP real de DEVELOP (`http://192.168.192.205:8000`), alcanzable por todo el equipo.
+
+### Fixed
+
+- `db/gestionar_servidor.py` (`cmd_baja`): no borraba `uso_disco` (tabla sin
+  `ON DELETE CASCADE`, agregada después de escribirse la función) — hacía fallar la baja de un
+  servidor con uso de disco cargado.
+- `postgres:18` exige montar su volumen en `/var/lib/postgresql` directo, ya no en
+  `/var/lib/postgresql/data` como `postgres:16` — encontrado al desplegar contra DEVELOP real.
+- `uid:gid` del contenedor backend estaba hardcodeado a `1000` (el de `quantum` en todos los
+  servidores conocidos hasta entonces); no generalizaba a una cuenta personal con otro uid
+  asignado por el sistema — ahora configurable vía `HOST_UID`/`HOST_GID`.
+
+### Removed
+
+- Servicio de Windows (NSSM) y tarea programada de la ingesta — reemplazados por Docker +
+  Ofelia. `scripts/instalar_tarea_ingesta.ps1` eliminado por quedar sin ningún uso.
+- `TAD_18_de_Marzo` (sitio PEMEX): PoC terminada, dado de baja del inventario y la base de
+  datos.
+
+[v2.0.0]: https://github.com/imedina27/monit_servers/releases/tag/v2.0.0
+
 ## [v1.0.0] - 2026-10-04
 
 Primer release estable: colector, base de datos, ingesta, backend/dashboard y
@@ -32,7 +94,7 @@ relay funcionando de punta a punta, con dos sitios reales en producción
   autónoma por SSH/SFTP desde un servidor "hub"/gateway hacia sus compañeros,
   con dos modos de carga a central — manual (sitio 100% offline, AbInBev) y
   automática vía `recolectar_relay_gateway()` (gateway online, API/Manzanillo).
-- Script `db/eliminar_servidor.py` para dar de baja un servidor del inventario
+- `db/gestionar_servidor.py baja` para dar de baja un servidor del inventario
   y su historial.
 
 ### Fixed
