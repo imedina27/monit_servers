@@ -204,7 +204,7 @@ Revisa `relay.log`: debe mostrar `Recolectado: <archivo>` por cada compañero co
 
 **La entrada del hub/gateway** cambia según el escenario:
 
-- **Sitio 100% offline (hub no alcanzable)** — igual que un servidor offline normal (`activo: false`, sin credenciales). La carga es manual: trae periódicamente (USB u otro medio) tanto `colector_ubuntu/lecturas/` (lo propio del hub) como `relay/relay_entrante/<companero>/` (lo de cada compañero) a `ingesta/pendientes_offline/<nombre_correspondiente>/` en la máquina central, y dispara la ingesta (botón "Actualizar").
+- **Sitio 100% offline (hub no alcanzable)** — igual que un servidor offline normal (`activo: false`, sin credenciales). La carga es manual: trae periódicamente (USB u otro medio) tanto `colector_ubuntu/lecturas/` (lo propio del hub) como `relay/relay_entrante/<companero>/` (lo de cada compañero) a `ingesta/pendientes_offline/<nombre_correspondiente>/` en la máquina central, y dispara la ingesta (botón "Actualizar"). Para juntar todo en un solo `.zip` antes de sacarlo del sitio (en vez de copiar carpeta por carpeta), corre en el propio hub [`relay/empaquetar_offline.py`](relay/empaquetar_offline.py) — arma un `.zip` con una subcarpeta por servidor (el hub + cada compañero), verifica su integridad, y solo borra los `.csv` originales tras confirmar explícitamente.
 
 - **Sitio con gateway online (alcanzable directo)** — `activo: true` con sus credenciales reales de SSH, más dos campos nuevos:
 
@@ -500,6 +500,7 @@ Monit_Servers_V2/
 │
 ├── relay/                                 ← Se instala en el servidor "hub"/gateway de un sitio offline
 │   ├── relay.py
+│   ├── empaquetar_offline.py              ← junta hub + companeros en un .zip, para sitios 100% offline
 │   ├── config.ini
 │   ├── companeros.yaml.example            ← plantilla versionada
 │   ├── companeros.yaml                    ← (gitignored) credenciales reales de ese sitio
