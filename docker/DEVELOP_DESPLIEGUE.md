@@ -127,7 +127,7 @@ Mismo espíritu que `PLAN_PRUEBA_DOCKER.md`, adaptado a que aquí Docker **ya es
 servidor **ya está en producción para otros** — cada paso valida antes de seguir, y nada debe
 afectar a los contenedores/servicios que ya corren ahí.
 
-### Paso 0 — Dar de baja `TAD_18_de_Marzo` (PoC de PEMEX terminada)
+### Paso 0 — Dar de baja `TAD_18_de_Marzo` (PoC de PEMEX terminada) ✅
 
 **Contexto (2026-10-11)**: la PoC en el sitio de PEMEX (`TAD_18_de_Marzo`) terminó. La máquina ya
 no pertenece a la red de ZeroTier que la conectaba (`192.168.194.0`, red `4753cf475f2eed8a`) — se
@@ -151,14 +151,14 @@ migrar los datos a DEVELOP, para no arrastrar ahí información de un sitio ya c
    `GET /api/servidores`; una corrida de la ingesta no vuelve a darlo de alta solo porque ya no
    está en el inventario.
 
-### Paso 1 — Preparar el directorio
+### Paso 1 — Preparar el directorio ✅
 
 1. `sudo mkdir -p /opt/quantum/monit-servers-v2`
 2. `sudo chown imedina:imedina /opt/quantum/monit-servers-v2`
 3. **Verificación**: `ls -ld /opt/quantum/monit-servers-v2` → dueño `imedina`, sin afectar nada
    más en `/opt`.
 
-### Paso 2 — Confirmar el DNS de Docker en DEVELOP
+### Paso 2 — Confirmar el DNS de Docker en DEVELOP ✅
 
 El `daemon.json` actual no tiene `"dns"` configurado — a diferencia de la VM, donde sin eso los
 builds fallaban (`Temporary failure resolving`). Antes de construir nuestra imagen:
@@ -173,7 +173,7 @@ builds fallaban (`Temporary failure resolving`). Antes de construir nuestra imag
    otros productos (la mayoría tienen `restart: always`/similar y deberían volver solos, pero es
    una acción que toca todo el host, no solo lo nuestro).
 
-### Paso 3 — Clonar el repositorio
+### Paso 3 — Clonar el repositorio ✅
 
 1. Como `imedina`: `cd /opt/quantum/monit-servers-v2 && git clone <url-del-repo> .` (o el método
    de acceso que ya se use para este repo — a confirmar si es HTTPS con token o llave SSH).
@@ -181,7 +181,7 @@ builds fallaban (`Temporary failure resolving`). Antes de construir nuestra imag
    `git status` limpio; **no** aparecen `.env`, `inventario_servidores.yaml`, `ingesta.log` ni
    `backend/service.log` (confirmaría que `.gitignore` hizo su trabajo).
 
-### Paso 4 — Secretos y configuración real
+### Paso 4 — Secretos y configuración real ✅
 
 1. Crear `.env` (credenciales de Postgres de producción, nuevas) e
    `inventario_servidores.yaml` (copiar del real que ya existe en la máquina Windows, o
@@ -192,7 +192,7 @@ builds fallaban (`Temporary failure resolving`). Antes de construir nuestra imag
    privilegios (ej. probar brevemente que ni siquiera el grupo `imedina` los puede leer, ya que
    son exclusivos de un solo archivo).
 
-### Paso 5 — Confirmar que no hay colisión de puertos/red
+### Paso 5 — Confirmar que no hay colisión de puertos/red ✅
 
 1. `ss -tlnp | grep 8000` (y cualquier otro puerto que vayamos a publicar) → debe seguir libre.
 2. `docker network ls` → confirmar que Compose va a crear su propia red con prefijo de proyecto,
@@ -232,7 +232,7 @@ probar la ingesta. A tener en cuenta para cualquier despliegue futuro desde un `
 crear esa carpeta con el dueño correcto *antes* del primer `docker compose up`, en vez de dejar
 que Docker la auto-cree.
 
-### Paso 8 — Validar ingesta online real (sin túnel esta vez)
+### Paso 8 — Validar ingesta online real (sin túnel esta vez) ✅
 
 A diferencia de la VM de prueba, DEVELOP ya tiene ZeroTier real — no hace falta ningún túnel SSH.
 
@@ -241,24 +241,66 @@ A diferencia de la VM de prueba, DEVELOP ya tiene ZeroTier real — no hace falt
    servidores del segmento `192.168.192.x`; se espera que **falle** (esperado, no es un bug) la
    conexión a `TAD_18_de_Marzo` (`192.168.194.x`) hasta que se resuelva el alcance de red aparte.
 
-### Paso 9 — Checklist final antes de dar el despliegue por cerrado
+### Paso 9 — Checklist final antes de dar el despliegue por cerrado ✅
 
-- [ ] `docker compose down` / `up` no pierde datos.
-- [ ] Reiniciar el contenedor del backend (no el host completo — no hay necesidad de reiniciar
-      todo DEVELOP solo por esto) y confirmar que vuelve solo.
-- [ ] Dashboard visualmente correcto, confirmado por el usuario.
-- [ ] Ninguno de los ~20 contenedores preexistentes se vio afectado (`docker ps` antes/después,
+- [x] `docker compose down` / `up` no pierde datos (124,230 lecturas intactas tras el ciclo).
+- [x] Reiniciar el contenedor del backend (no el host completo) y confirmar que vuelve solo —
+      `docker restart`, `Up` en segundos, HTTP 200 de inmediato.
+- [x] Dashboard visualmente correcto, confirmado por el usuario (`http://192.168.192.205:8000`).
+- [x] Ninguno de los ~23 contenedores preexistentes se vio afectado (`docker ps` antes/después,
       mismo conteo y mismos nombres corriendo).
-- [ ] Espacio en disco revisado una vez más tras la carga de datos real.
+- [x] Espacio en disco revisado una vez más tras la carga de datos real — sin impacto apreciable
+      (nuestro stack es ligero frente al resto de lo que ya corre en DEVELOP).
+
+**Paso 9 cerrado — despliegue en DEVELOP dado por completo el 2026-10-11.**
 
 ## 4. Qué NO se hace en este plan (a propósito)
 
+> Esto describe el alcance original de los 9 pasos de arriba. Varios de estos puntos sí se
+> resolvieron después, como trabajo de seguimiento — ver la sección 5.
+
 - No se resuelve el alcance de red a `192.168.194.0` (TAD_18_de_Marzo) — es un tema de
-  ZeroTier/ruteo, independiente de Docker.
+  ZeroTier/ruteo, independiente de Docker. **Sigue sin resolverse** (el servidor se dio de baja en
+  el Paso 0, ya no hace falta).
 - No se toca ningún contenedor, red, ni archivo de otros productos ya corriendo en DEVELOP.
-- No se instala todavía el scheduler Ofelia (la ingesta se dispara a mano o vía el botón
-  "Actualizar", igual que en la prueba de la VM) — se agrega en una iteración posterior.
-- No se apaga el stack actual en la máquina Windows (NSSM + tarea programada) hasta confirmar que
-  DEVELOP funciona de punta a punta con datos reales.
+  **Se mantuvo así** durante todo el trabajo posterior también (confirmado repetidas veces).
+- ~~No se instala todavía el scheduler Ofelia~~ — **instalado el mismo día**, ver sección 5.
+- ~~No se apaga el stack actual en la máquina Windows~~ — **apagado el mismo día**, ver sección 5.
 - No se modifica `/etc/docker/daemon.json` salvo que el paso 2 confirme que de verdad hace falta,
-  y en ese caso como un *merge*, nunca un reemplazo.
+  y en ese caso como un *merge*, nunca un reemplazo. **No hizo falta** — el DNS ya funcionaba bien
+  en DEVELOP sin tocar nada (a diferencia de la VM de prueba).
+
+## 5. Qué pasó después (trabajo de seguimiento, 2026-10-11)
+
+Todo esto fuera del alcance de los 9 pasos originales, hecho el mismo día una vez confirmado el
+despliegue base:
+
+- **Corte de Windows**: servicio NSSM (`MonitServersV2_Backend`) eliminado por completo
+  (`sc.exe delete`), tarea programada (`MonitServersV2_Ingesta`) deshabilitada. Confirmado que
+  nada sigue escuchando en el puerto 8000 local — DEVELOP es la única fuente activa desde entonces.
+- **Scheduler Ofelia**: agregado a `docker-compose.yml` como tercer servicio. Dispara
+  `POST /api/ingesta/ejecutar` dentro del contenedor `backend` cada hora en punto
+  (`0 0 * * * *`) vía `docker exec`, sin tocar systemd/cron del host. Probado primero con un
+  intervalo corto (`@every 15s`) para confirmar el disparo real, luego cambiado a la cadencia
+  final.
+- **`BIND_IP`**: el dashboard pasó de `127.0.0.1` (loopback-only, el criterio inicial conservador)
+  a publicarse también en `192.168.192.205` (la IP de ZeroTier) — variable nueva en
+  `docker/.env`, mismo criterio que `BIND_EXTRA_IPS` de Quantum. Cumple el objetivo original del
+  paso 13: cualquiera del equipo lo ve, no solo quien hizo el despliegue.
+- **`HOST_UID`/`HOST_GID`**: el `uid:gid` del contenedor estaba hardcodeado a `1000` (el de
+  `quantum` en todos los servidores conocidos hasta entonces) — no generalizaba a `imedina`
+  (uid 1007 en DEVELOP, asignado por el sistema al no ser `quantum`). Causaba `permission denied`
+  al leer `inventario_servidores.yaml`. Corregido con build args configurables en
+  `docker/Dockerfile`/`docker-compose.yml`.
+- **Scripts de administración (`db/gestionar_servidor.py`) contra DEVELOP**: como el puerto de
+  Postgres en DEVELOP no está expuesto a la red (decisión de seguridad del paso 13), estos
+  scripts no se pueden correr directo desde Windows apuntando ahí. Patrón que se usó varias veces
+  con éxito: `docker cp` del script (vive en el host vía el `git clone`, aunque no esté en la
+  imagen del backend) + el archivo de entrada al contenedor `backend`, y
+  `docker compose exec backend python <script> <accion> ...` — el contenedor ya tiene
+  `DB_HOST=postgres` en su entorno, así que se conecta sin configuración adicional. Usado para
+  `importar` (hardware de `QLYMSPROD01`/`QLYMSPROD02`) y `umbrales` (`MINI_LENOVO`,
+  `QLYMSPROD01`, `QLYMSPROD02`).
+- **Scripts nuevos para sitios offline**: `relay/empaquetar_offline.py` (corre en el hub,
+  empaqueta en un `.zip`) y `scripts/desempaquetar_offline.py` (corre en Windows, sube el `.zip` a
+  DEVELOP y dispara la ingesta) — ver el README para el detalle.

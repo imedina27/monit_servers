@@ -4,7 +4,10 @@ Sistema centralizado para monitorear temperaturas de CPU/GPU de 15-20 servidores
 
 ## Estado
 
-En construcción. Ver [ROADMAP.md](ROADMAP.md) para el plan de trabajo paso a paso.
+**En producción.** Monitoreando 11 servidores reales en 4 sitios (Quantum, AbInBev Zacatecas,
+API/Manzanillo, C5i/Colima), stack central (Postgres + backend/dashboard + ingesta) corriendo en
+Docker en DEVELOP. Sigue habiendo trabajo pendiente — ver [ROADMAP.md](ROADMAP.md) para el detalle
+de lo que falta.
 
 ## Versionado
 
@@ -21,9 +24,9 @@ quien no siguió el trabajo commit por commit).
 
 ## Contexto / decisiones ya tomadas
 
-- **Escala**: 15-20 servidores, mezcla de Ubuntu y Windows.
+- **Escala**: pensado para 15-20 servidores, mezcla de Ubuntu y Windows — hoy en operación real son 11, todos Ubuntu (el colector de Windows está en pausa, ver paso 4 del ROADMAP).
 - **Base de datos**: PostgreSQL, containerizado con Docker desde el 2026-10-11 (antes corría nativo en la máquina Windows del usuario — ver sección de instalación). Se descartó SQLite por el volumen de servidores.
-- **Riesgo técnico principal**: lectura de temperatura en Windows — WMI (`MSAcpi_ThermalZoneTemperature`) no es confiable en hardware moderno; se usará **LibreHardwareMonitorLib** (requiere permisos de administrador).
+- **Riesgo técnico principal (si se retoma el colector de Windows)**: lectura de temperatura en Windows — WMI (`MSAcpi_ThermalZoneTemperature`) no es confiable en hardware moderno; se investigó **LibreHardwareMonitorLib** (requiere permisos de administrador) como alternativa, ver paso 4 del ROADMAP para el detalle de lo ya probado.
 
 ## Arquitectura (resumen)
 
