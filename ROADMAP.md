@@ -492,7 +492,20 @@ A petición del usuario, tras ver el resultado del paso 16 — mostrar el uso de
   reales verificados (ej. número de serie `2M284101BM`/`2M2930003C`, antes solo del Excel); los
   DIMMs siguen sin detalle en ambos, pero esta vez porque `dmidecode` no los expone en este
   hardware (HPE ProLiant DL380 Gen10) ni corriendo como root — no es falta de permisos.
-- **Umbral de temperatura propio para `MINI_LENOVO`, `QLYMSPROD01` y `QLYMSPROD02`**: siguen usando el default genérico (70/85°C CPU, 75/85°C GPU) aunque ya conocemos su hardware real (`ARM Cortex-X925/A725 + GB10`, `2x Intel Xeon Gold 5118 + Tesla P100` respectivamente) — falta investigar sus umbrales reales e insertarlos con `db/gestionar_servidor.py umbrales`.
+- ~~Umbral de temperatura propio para `MINI_LENOVO`, `QLYMSPROD01` y `QLYMSPROD02`.~~ Resuelto el
+  2026-10-11 — investigado por modelo real e insertado con `gestionar_servidor.py umbrales`
+  (corrido dentro del contenedor backend de DEVELOP, vía `docker cp` + `exec -T` con el stdin
+  piped, mismo truco que `importar`).
+  - `QLYMSPROD01`/`QLYMSPROD02` (2x Xeon Gold 5118 + Tesla P100, idénticos): CPU 70/**81**°C
+    (TCASE oficial del fabricante, confirmado por varias hojas de especificación de OEM); GPU
+    70/**80**°C ("GPU Max Operating Temperature" de la hoja de datos oficial de NVIDIA — el
+    throttle real empieza en 82°C y el apagado en 85°C).
+  - `MINI_LENOVO` (ARM Cortex-A725 + NVIDIA GB10): CPU y GPU 70/**85**°C — **estimado**, no
+    sourced. NVIDIA no publica hoja de datos térmica para el GB10 (chip de 2025, CPU+GPU
+    integrados en un solo paquete, sin sensor independiente conocido por componente). Basado en
+    reportes reales de usuarios en foros de NVIDIA: apagado observado a 87°C en una prueba
+    sostenida de 73h, throttling a nivel plataforma reportado en 90-97°C — el ámbar se dejó con
+    margen real por debajo de ambos.
 
 ## Mejoras futuras (no bloquean el roadmap)
 
