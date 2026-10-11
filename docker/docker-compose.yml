@@ -33,8 +33,15 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
     container_name: monit-servers-v2-backend
-    user: "1000:1000"
+    # uid:gid del dueno real de los archivos montados (inventario_servidores.yaml, etc.) en este
+    # host -- definir HOST_UID/HOST_GID en docker/.env si no es 1000 (el de "quantum"). Si no
+    # coincide exacto con el dueno real, el contenedor no puede leer esos archivos (permission
+    # denied), aunque el build haya salido bien.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"

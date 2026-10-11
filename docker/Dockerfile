@@ -2,6 +2,15 @@
 # Build desde la raiz del repo: docker build -f docker/Dockerfile .  (docker compose ya lo hace asi)
 FROM python:3.14-slim
 
+# uid:gid del usuario real del host que va a correr el contenedor (ver docker-compose.yml). Por
+# defecto 1000, el de "quantum" en todos los servidores Quantum conocidos -- pero no es universal:
+# una cuenta personal (ej. "imedina" en DEVELOP) puede tener un uid distinto, asignado por el
+# sistema. Pasar HOST_UID/HOST_GID por build arg en vez de hornear 1000 a mano evita que el
+# contenedor quede sin permiso de lectura sobre los secretos del host (inventario_servidores.yaml,
+# etc., montados con el uid:gid real del dueño).
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+
 WORKDIR /opt/quantumlabs/monit-servers-v2
 
 RUN apt-get update && \
@@ -18,11 +27,9 @@ COPY backend backend
 COPY dashboard dashboard
 COPY ingesta ingesta
 
-# El contenedor corre como el usuario real del host (ver docker-compose.yml: user "1000:1000"),
-# que es el uid:gid de "quantum" en todos los servidores Quantum conocidos hasta ahora (incluida
-# esta VM de prueba). ingesta/ necesita escritura propia para su log (ingesta/ingesta.log);
-# pendientes_offline/ llega aparte como volumen del host y no depende de esto.
-RUN chown 1000:1000 ingesta
+# ingesta/ necesita escritura propia para su log (ingesta/ingesta.log); pendientes_offline/ llega
+# aparte como volumen del host y no depende de esto.
+RUN chown ${HOST_UID}:${HOST_GID} ingesta
 
 # .env, inventario_servidores.yaml y ingesta/pendientes_offline/ NUNCA se hornean en la imagen:
 # llegan como variables de entorno / volumenes desde el host (ver docker-compose.yml).
