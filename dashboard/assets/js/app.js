@@ -357,6 +357,8 @@ document.addEventListener("DOMContentLoaded", () => {
 async function cargarActual() {
     if (!estado.servidor) return;
     const contenedorTarjetas = document.getElementById("tarjetas");
+    const contenedorUmbrales = document.getElementById("tarjetas-umbrales");
+    const divisorTarjetas = document.getElementById("tarjetas-divisor");
     const cuerpoTabla = document.getElementById("tabla-sensores");
     const contenedorHardware = document.getElementById("hardware-contenido");
 
@@ -372,6 +374,8 @@ async function cargarActual() {
 
         if (lecturas.length === 0) {
             contenedorTarjetas.innerHTML = `<p class="mensaje-vacio">Sin lecturas todavía para este servidor.</p>`;
+            contenedorUmbrales.innerHTML = "";
+            divisorTarjetas.hidden = true;
             cuerpoTabla.innerHTML = "";
             fechaLecturas.textContent = "";
             return;
@@ -432,6 +436,36 @@ async function cargarActual() {
             </div>
         `;
         }).join("");
+
+        // Tarjetas de umbral (verde/ambar/rojo configurados para este servidor en
+        // Postgres, via hardware.umbrales -- una por componente que tenga tarjeta
+        // de temperatura, nunca una por sensor/GPU individual).
+        const umbralTarjetas = [];
+        if (cpu.length > 0 && hardware.umbrales?.cpu) {
+            umbralTarjetas.push({ titulo: "Umbral CPU", ...hardware.umbrales.cpu });
+        }
+        if (gpus.length > 0 && hardware.umbrales?.gpu) {
+            umbralTarjetas.push({ titulo: "Umbral GPU", ...hardware.umbrales.gpu });
+        }
+
+        divisorTarjetas.hidden = umbralTarjetas.length === 0;
+        contenedorUmbrales.innerHTML = umbralTarjetas.map(u => `
+            <div class="tarjeta tarjeta--umbral">
+                <div class="tarjeta__titulo">${u.titulo}</div>
+                <div class="umbral-fila">
+                    <span class="umbral-fila__etiqueta"><span class="umbral-fila__punto" data-color="verde"></span>Verde</span>
+                    <span class="umbral-fila__valor">≤ ${u.verde_max}°C</span>
+                </div>
+                <div class="umbral-fila">
+                    <span class="umbral-fila__etiqueta"><span class="umbral-fila__punto" data-color="ambar"></span>Ámbar</span>
+                    <span class="umbral-fila__valor">≤ ${u.ambar_max}°C</span>
+                </div>
+                <div class="umbral-fila">
+                    <span class="umbral-fila__etiqueta"><span class="umbral-fila__punto" data-color="rojo"></span>Rojo</span>
+                    <span class="umbral-fila__valor">&gt; ${u.ambar_max}°C</span>
+                </div>
+            </div>
+        `).join("");
 
         cuerpoTabla.innerHTML = lecturas.map(l => `
             <tr>

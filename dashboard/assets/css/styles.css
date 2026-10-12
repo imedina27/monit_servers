@@ -313,6 +313,24 @@ section {
 /* ============================================================
    Tarjetas de estado actual
    ============================================================ */
+/* Fila que agrupa las tarjetas de temperatura y las de umbral -- mas espacio
+   y un divisor vertical entre ambos grupos (ver .tarjetas-divisor) para que
+   no se lean como un solo bloque (podria confundirse umbral con lectura). */
+.tarjetas-fila {
+    display: flex;
+    align-items: stretch;
+    gap: 28px;
+    flex-wrap: wrap;
+}
+.tarjetas-fila > .tarjetas {
+    flex: 1 1 460px;
+}
+.tarjetas-divisor {
+    width: 1px;
+    align-self: stretch;
+    background-color: var(--borde);
+}
+
 .tarjetas {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -395,6 +413,43 @@ section {
     font-size: 12px;
     color: var(--texto-secundario);
     margin-top: 4px;
+}
+
+/* Tarjeta de umbral (verde/ambar/rojo configurados para el servidor) --
+   mismo contenedor .tarjeta, pero en vez de un valor grande muestra las
+   3 filas de rango. */
+.tarjeta--umbral {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.tarjeta--umbral .tarjeta__titulo {
+    margin-bottom: 4px;
+}
+.umbral-fila {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+}
+.umbral-fila__etiqueta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--texto-secundario);
+}
+.umbral-fila__punto {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.umbral-fila__punto[data-color="verde"] { background-color: var(--verde); }
+.umbral-fila__punto[data-color="ambar"] { background-color: var(--ambar); }
+.umbral-fila__punto[data-color="rojo"]  { background-color: var(--rojo); }
+.umbral-fila__valor {
+    font-weight: 600;
 }
 
 /* ============================================================

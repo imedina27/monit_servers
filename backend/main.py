@@ -209,6 +209,12 @@ def hardware_servidor(nombre: str):
         )
         resultado["raid"] = cur.fetchall()
 
+        umbrales_servidor = obtener_umbrales_servidor(cur, servidor_id)
+        resultado["umbrales"] = {
+            "cpu": umbrales_servidor.get("cpu") or UMBRALES_DEFAULT["cpu"],
+            "gpu": umbrales_servidor.get("gpu") or UMBRALES_DEFAULT["gpu"],
+        }
+
     return resultado
 
 
