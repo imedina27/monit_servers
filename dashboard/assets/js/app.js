@@ -417,7 +417,14 @@ async function cargarActual() {
         // Si el componente dejo de reportar (ej. GPU con driver caido), su ultima
         // lectura puede ser de hace dias/semanas. Mostrarla como si fuera el valor
         // actual es enganoso, asi que a partir de este umbral se muestra "--".
-        const UMBRAL_OBSOLETO_MS = 3 * 60 * 60 * 1000; // 3 horas (el intervalo normal de muestreo es 1h)
+        // 24h (no 3h) porque sitios 100% offline como AbInBev solo se descargan
+        // ~1 vez al dia (visita manual a sitio, ver paso 14/ROADMAP) -- con 3h
+        // se mostraba "--" todos los dias aunque el dato fuera normal. Es un
+        // umbral global (igual para los servidores que reportan cada hora), no
+        // por servidor -- decision explicita del usuario el 2026-10-12 pese a
+        // que eso retrasa hasta 24h detectar una falla real (ej. driver de GPU
+        // caido) en los servidores que si reportan seguido.
+        const UMBRAL_OBSOLETO_MS = 24 * 60 * 60 * 1000;
         const esObsoleta = (medidoEn) => (Date.now() - new Date(medidoEn).getTime()) > UMBRAL_OBSOLETO_MS;
 
         contenedorTarjetas.innerHTML = tarjetas.map(t => {
