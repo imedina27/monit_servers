@@ -453,6 +453,13 @@ visual por cliente/ciudad en el dashboard.
   importado uno por uno.
 - AbInBev: de 2 a **9 servidores reales operando** (`QLYMSPROD01/02/03/04/05/06/09/10/11`),
   repartidos en 8 ciudades/plantas distintas (tabla arriba).
+- **Orden del árbol corregido (2026-10-12)**: `QLYMSPROD03` se había agregado al final del
+  bloque de AbInBev en el inventario (después de `04` a `11`) en vez de en su posición
+  numérica — el `orden` del árbol del dashboard refleja la posición en el YAML, no el nombre
+  del servidor (ver `db/schema.sql`), así que el grupo "Apan" aparecía al final en vez de
+  justo después de Zacatecas. Corregido moviendo el bloque de `QLYMSPROD03` justo después de
+  `QLYMSPROD02` en el inventario de DEVELOP, confirmado en Postgres tras disparar la ingesta
+  (`orden` recalculado solo, sin tocar la BD a mano).
 
 ### Probado ✅ (caso gateway online, automatizado en `ingesta.py`, contra servidores de prueba)
 
@@ -547,6 +554,49 @@ A petición del usuario, tras ver el resultado del paso 16 — mostrar el uso de
 - El slider se queda oculto cuando un servidor todavía no acumula más de una lectura para esa agrupación (nada que recorrer) — aparece solo conforme el colector genera más ciclos.
 
 **Paso 16 cerrado.**
+
+## 17. Umbrales de temperatura visibles en el dashboard + ajustes de lecturas obsoletas ✅
+
+A petición del usuario: los umbrales verde/ámbar/rojo de cada servidor vivían solo en
+Postgres (tabla `umbrales`), sin forma de verlos desde el dashboard — había que
+consultarlos a mano.
+
+### Implementado y probado ✅ (2026-10-12)
+
+- **Mock antes de tocar código** (misma convención ya usada en el paso 16): se armó un
+  mock HTML con los colores/tipografía/componentes reales del dashboard, iterado con
+  feedback del usuario (más separación entre el bloque de temperaturas y el de umbrales,
+  para no confundir uno con otro) antes de implementar —
+  [ver mock](https://claude.ai/artifact/VGTitvfJn88gGfKVqQfmVG).
+- **Backend**: `GET /api/servidores/{nombre}/hardware` ahora también devuelve
+  `umbrales.cpu`/`umbrales.gpu` (mismo fallback a `UMBRALES_DEFAULT` que ya usaba
+  `/actual`) — no se creó un endpoint nuevo porque `/hardware` ya se pide en paralelo con
+  `/actual` en cada carga del dashboard.
+- **Dashboard**: 2 tarjetas nuevas ("Umbral CPU"/"Umbral GPU") junto a las de
+  temperatura, con las 3 filas verde/ámbar/rojo — separadas del grupo de temperatura con
+  más espacio y un divisor vertical. Sin nota de "procedencia del umbral" (spec real del
+  fabricante vs. estimado): se consideró (ver investigación en el paso 14, no todos los
+  servidores tienen la misma procedencia) pero se descartó explícitamente por el usuario
+  para no complicar algo que en principio era simple — la procedencia real sigue
+  viviendo solo en prosa en este ROADMAP, no es dato estructurado en Postgres.
+- **Umbral de "obsoleto" subido de 3h a 24h** (`dashboard/assets/js/app.js`): sitios
+  100% offline como AbInBev se descargan ~1 vez al día (visita manual a sitio, ver paso
+  14), así que con 3h las tarjetas de temperatura se veían en `--°C` todos los días
+  aunque el dato fuera normal para su cadencia real. Queda **global** (igual para los
+  servidores que reportan cada hora) por decisión explícita del usuario, pese a que esto
+  también retrasa hasta 24h detectar una falla real (ej. driver de GPU caído, el caso que
+  motivó esta regla originalmente) en los servidores que sí reportan seguido.
+- **Bug corregido en la tarjeta "CPU (máx.)"**: elegía el sensor de CPU con la
+  temperatura más alta entre todos, sin descartar antes los obsoletos. Un sensor
+  fantasma de una prueba manual del colector (ej. `x86_pkg_temp_2` en `QLYMSPROD01`, con
+  una sola lectura de hace 10 días a 68°C y nunca más) terminaba ganando ese "peor caso"
+  por su valor alto, y como esa lectura puntual es vieja, la tarjeta completa se marcaba
+  `--` aunque el resto de los cores tuvieran datos de hace minutos. Ahora se descartan
+  los sensores obsoletos antes de buscar el peor caso; solo si *todos* los sensores de
+  CPU están obsoletos se usa el conjunto completo (para seguir mostrando `--` en ese caso
+  real).
+
+**Paso 17 cerrado.**
 
 ## Pendiente de decidir
 

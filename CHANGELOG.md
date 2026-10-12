@@ -3,6 +3,25 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
 
+## [Unreleased]
+
+### Added
+
+- Tarjetas "Umbral CPU"/"Umbral GPU" en el dashboard (verde/ámbar/rojo configurados por
+  servidor en Postgres), junto a las tarjetas de temperatura (paso 17).
+
+### Fixed
+
+- Umbral de "lectura obsoleta" (el que marca `--°C` en vez del valor real) subido de 3h
+  a 24h — sitios 100% offline como AbInBev se descargan ~1 vez al día, no cada hora.
+- La tarjeta "CPU (máx.)" podía marcarse como obsoleta (`--°C`) por un solo sensor
+  fantasma con una lectura vieja de temperatura alta, aunque el resto de los cores
+  tuvieran datos recientes.
+- Ciudades/plantas reales de los 7 servidores nuevos de AbInBev corregidas en el
+  inventario y la documentación (no todos eran de Zacatecas).
+- Orden de `QLYMSPROD03` en el inventario de AbInBev corregido — aparecía al final del
+  árbol del dashboard en vez de justo después de Zacatecas.
+
 ## [v2.0.0] - 2026-10-11
 
 Migración del stack central (Postgres + backend/dashboard + ingesta) de la máquina Windows
