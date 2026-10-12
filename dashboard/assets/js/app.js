@@ -387,6 +387,19 @@ async function cargarActual() {
         }, new Date(lecturas[0].medido_en));
         fechaLecturas.textContent = `(${masReciente.toLocaleDateString("es-MX")})`;
 
+        // Si el componente dejo de reportar (ej. GPU con driver caido), su ultima
+        // lectura puede ser de hace dias/semanas. Mostrarla como si fuera el valor
+        // actual es enganoso, asi que a partir de este umbral se muestra "--".
+        // 24h (no 3h) porque sitios 100% offline como AbInBev solo se descargan
+        // ~1 vez al dia (visita manual a sitio, ver paso 14/ROADMAP) -- con 3h
+        // se mostraba "--" todos los dias aunque el dato fuera normal. Es un
+        // umbral global (igual para los servidores que reportan cada hora), no
+        // por servidor -- decision explicita del usuario el 2026-10-12 pese a
+        // que eso retrasa hasta 24h detectar una falla real (ej. driver de GPU
+        // caido) en los servidores que si reportan seguido.
+        const UMBRAL_OBSOLETO_MS = 24 * 60 * 60 * 1000;
+        const esObsoleta = (medidoEn) => (Date.now() - new Date(medidoEn).getTime()) > UMBRAL_OBSOLETO_MS;
+
         // Tarjeta de CPU: se muestra el core mas caliente (peor caso), no el promedio.
         const cpu = lecturas.filter(l => l.componente === "cpu");
         const gpus = lecturas.filter(l => l.componente === "gpu").sort((a, b) => a.sensor.localeCompare(b.sensor));
@@ -407,25 +420,22 @@ async function cargarActual() {
 
         const tarjetas = [];
         if (cpu.length > 0) {
-            const peor = cpu.reduce((max, l) => (l.temperatura_c > max.temperatura_c ? l : max), cpu[0]);
+            // Un sensor fantasma (ej. de una prueba manual del colector, hace
+            // semanas) puede quedar con la temperatura mas alta de todas sin
+            // haber vuelto a reportar nunca -- si se descartaran los obsoletos
+            // DESPUES de elegir "el peor caso", ese sensor viejo secuestraria la
+            // tarjeta entera (la marcaria obsoleta aunque el resto de los cores
+            // sean recientes). Por eso primero se descartan los obsoletos, y
+            // solo si TODOS los sensores de CPU estan obsoletos se usa el
+            // conjunto completo (para seguir mostrando "--" en ese caso real).
+            const cpuVigente = cpu.filter(l => !esObsoleta(l.medido_en));
+            const candidatosCpu = cpuVigente.length > 0 ? cpuVigente : cpu;
+            const peor = candidatosCpu.reduce((max, l) => (l.temperatura_c > max.temperatura_c ? l : max), candidatosCpu[0]);
             tarjetas.push({ titulo: "CPU (máx.)", ...peor, sensor: subtituloCpu || peor.sensor, color: cssVar("--serie-1") });
         }
         gpus.forEach((g, i) => {
             tarjetas.push({ titulo: g.sensor.replace("_", " "), ...g, sensor: subtituloGpu || g.sensor, color: cssVar(coloresGpu[i % coloresGpu.length]) });
         });
-
-        // Si el componente dejo de reportar (ej. GPU con driver caido), su ultima
-        // lectura puede ser de hace dias/semanas. Mostrarla como si fuera el valor
-        // actual es enganoso, asi que a partir de este umbral se muestra "--".
-        // 24h (no 3h) porque sitios 100% offline como AbInBev solo se descargan
-        // ~1 vez al dia (visita manual a sitio, ver paso 14/ROADMAP) -- con 3h
-        // se mostraba "--" todos los dias aunque el dato fuera normal. Es un
-        // umbral global (igual para los servidores que reportan cada hora), no
-        // por servidor -- decision explicita del usuario el 2026-10-12 pese a
-        // que eso retrasa hasta 24h detectar una falla real (ej. driver de GPU
-        // caido) en los servidores que si reportan seguido.
-        const UMBRAL_OBSOLETO_MS = 24 * 60 * 60 * 1000;
-        const esObsoleta = (medidoEn) => (Date.now() - new Date(medidoEn).getTime()) > UMBRAL_OBSOLETO_MS;
 
         contenedorTarjetas.innerHTML = tarjetas.map(t => {
             const obsoleta = esObsoleta(t.medido_en);
