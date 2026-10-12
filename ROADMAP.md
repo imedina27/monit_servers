@@ -394,6 +394,44 @@ validación en paralelo. Ver "Después del corte" abajo, ya ejecutado.
 - Inventario actualizado: `QLYMSPROD02` agregado (`activo: false`, mismo patrón que QLYMSPROD01); `QLYMSPROD01` con `es_gateway_de: [QLYMSPROD02]`.
 - La carga a central **sigue siendo manual** (sitio 100% offline, por diseño — punto 4): copiar lecturas propias de QLYMSPROD01 + `relay_entrante/QLYMSPROD02/` a `pendientes_offline/` cuando se tenga acceso al sitio.
 
+### Expansión real en sitio (AbInBev Zacatecas: QLYMSPROD03 a QLYMSPROD11, 2026-10-11)
+
+El sitio pasó de 2 a **9 servidores monitoreados** — `QLYMSPROD03`, `04`, `05`, `06`, `09`, `10` y
+`11` se instalaron y dieron de alta en la misma visita, usando exactamente el mismo mecanismo ya
+probado (colector + relay detrás del hub `QLYMSPROD01`, carga manual vía `.zip`).
+
+- **Colector**: instalado en los 7 servidores nuevos, copiando solo `monitor.py`/`config.ini`/
+  `monit_servers_v2.service` (nunca `monitor.log`/`lecturas/` del origen, para no heredar logs o
+  permisos de otro servidor) hacia carpetas ya preparadas en cada destino, vía `scp` corriendo
+  desde `QLYMSPROD01` (el único con alcance de red a los demás). Algunos (ej. `QLYMSPROD10`)
+  corrieron sin `lm-sensors` instalado — el fallback a `thermal_zones` funcionó igual, sin bloquear
+  nada.
+- **`lm-sensors` sin internet en el sitio**: como los servidores de AbInBev no tienen salida a
+  internet, se descargó el `.deb` de `lm-sensors` + dependencias (`apt-get download`) en la VM de
+  prueba de Docker (paso 13, Ubuntu 22.04.5 LTS — misma versión exacta que estos servidores), se
+  pasó por OneDrive y se instaló en sitio con `dpkg -i`. Se evitó forzar `libc6`/`sed` (paquetes
+  base casi seguro ya presentes) para no arriesgar un downgrade accidental.
+- **`companeros.yaml`** en `QLYMSPROD01` actualizado con los 7 nuevos compañeros — confirmado que
+  el cambio se toma solo, sin reiniciar el servicio (`relay.py` relee `companeros.yaml` en cada
+  ciclo, no solo al arrancar).
+- **Inventario central**: los 7 agregados a `inventario_servidores.yaml` en DEVELOP (`activo:
+  false`, mismo patrón que `QLYMSPROD02`).
+- **Hardware real**: `extraer_hardware.py` corrido en los 7 (con `sudo`, salvo `QLYMSPROD10` que
+  quedó sin detalle de DIMMs por no haberse corrido como root) e importado con `gestionar_servidor.py
+  importar` — CPUs Intel Xeon Platinum/Silver (varios modelos) y GPUs NVIDIA Tesla V100/T4, Quadro
+  RTX 4000/P620 y A2.
+- **Umbrales de temperatura reales** para los 7: CPU por TCASE oficial de Intel (ARK/distribuidores,
+  según modelo); GPU por "GPU Max Operating Temp" leído directo de cada tarjeta con
+  `nvidia-smi -q -d TEMPERATURE` en sitio (más confiable que una hoja de datos genérica — NVIDIA
+  mismo recomienda no asumir el valor de otro SKU). `QLYMSPROD10` (Quadro P620) no reporta ese
+  campo (`N/A`); se estimó con margen por debajo de su "Slowdown Temp" real (100°C → ambar 95°C).
+- **Carga a central**: un solo `.zip` (`relay_AbInBev.zip`, vía `relay/empaquetar_offline.py` +
+  `scripts/desempaquetar_offline.py`) con los 9 servidores del sitio — 82 archivos offline cargados
+  sin errores. El hardware se subió aparte en otro `.zip` (7 `.json` de `extraer_hardware.py`),
+  importado uno por uno.
+- Sitio AbInBev Zacatecas: de 2 a **9 servidores reales operando** (`QLYMSPROD01/02/03/04/05/06/09/
+  10/11`).
+
 ### Probado ✅ (caso gateway online, automatizado en `ingesta.py`, contra servidores de prueba)
 
 - Construida `recolectar_relay_gateway()` en [`ingesta/ingesta.py`](ingesta/ingesta.py): se adelantó respecto al plan original (ya no se espera al paso 13/Docker, se hizo ahora porque no tiene dependencia real con la migración). Para cualquier servidor online con `es_gateway_de` en el inventario, `procesar_online()` ahora, después de bajar sus propios archivos, también baja por SFTP lo que el `relay.py` de ese gateway dejó en `directorio_relay/<nombre_companero>/` y lo deposita en `pendientes_offline/<nombre_companero>/` local (mismo patrón `.tmp` + rename atómico, borra del gateway solo tras confirmar escritura local) — `procesar_offline()` lo recoge en la misma corrida, sin copia manual.
@@ -432,15 +470,25 @@ validación en paralelo. Ver "Después del corte" abajo, ya ejecutado.
   `disco_*.csv` reales de `QLYMSPROD01` (18 registros de uso de disco en Postgres, su primer dato
   de este tipo). 106 archivos en total cargados (55 de `QLYMSPROD01` + 51 de `QLYMSPROD02`,
   lecturas del 9 al 11 de octubre).
-- Un tercer cliente/sitio nuevo (si lo hay) quedaría con el mismo mecanismo ya probado en ambos escenarios (offline total y gateway online, incluido multi-compañero) contra producción real.
+- Un tercer cliente/sitio nuevo (si lo hay) quedaría con el mismo mecanismo ya probado en ambos escenarios (offline total y gateway online, incluido multi-compañero) contra producción real. La expansión de AbInBev (ver arriba, de 2 a 9 servidores) ya confirmó que el mecanismo escala a varios compañeros nuevos detrás del mismo hub, sin cambios de código.
 
 ### Sitio PEMEX (TAD_18_de_Marzo) — PoC cerrada (2026-10-11)
 
 `TAD_18_de_Marzo` (grupo `PEMEX`) se había agregado al inventario como servidor online normal (sin relay, alcanzable directo por ZeroTier). La PoC con PEMEX terminó y la máquina ya no pertenece a la red de ZeroTier correspondiente — se da de baja del inventario y de la base de datos (ver [`docker/DEVELOP_DESPLIEGUE.md`](docker/DEVELOP_DESPLIEGUE.md), Paso 0, que se ejecuta antes de migrar datos a DEVELOP para no arrastrar un sitio ya cerrado).
 
-## 15. Validación end-to-end (opcional, recomendado)
+## 15. Validación end-to-end (opcional, recomendado) ✅
 
 - Prueba completa del flujo: colector → ingesta → BD → dashboard, con al menos un servidor Ubuntu y uno Windows reales antes de dar el proyecto por cerrado.
+
+### Cubierto ✅ (sin prueba formal separada, validado contra producción real)
+
+El requisito de un servidor Windows real quedó obsoleto: el paso 4 (colector de Windows) sigue
+en pausa, el proyecto avanza solo con servidores Ubuntu. El flujo completo (colector → ingesta →
+BD → dashboard) sí quedó validado de punta a punta contra datos reales, repetidamente, en los
+pasos 9-14 (cada sitio real: Quantum, AbInBev, API/Manzanillo, C5i/Colima) y de nuevo al migrar
+a Docker en el paso 13 — no hizo falta una prueba separada además de esas.
+
+**Paso 15 cerrado.**
 
 ## 16. Uso de disco por volumen/punto de montaje en el dashboard ✅
 
