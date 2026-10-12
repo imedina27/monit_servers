@@ -394,11 +394,33 @@ validación en paralelo. Ver "Después del corte" abajo, ya ejecutado.
 - Inventario actualizado: `QLYMSPROD02` agregado (`activo: false`, mismo patrón que QLYMSPROD01); `QLYMSPROD01` con `es_gateway_de: [QLYMSPROD02]`.
 - La carga a central **sigue siendo manual** (sitio 100% offline, por diseño — punto 4): copiar lecturas propias de QLYMSPROD01 + `relay_entrante/QLYMSPROD02/` a `pendientes_offline/` cuando se tenga acceso al sitio.
 
-### Expansión real en sitio (AbInBev Zacatecas: QLYMSPROD03 a QLYMSPROD11, 2026-10-11)
+### Expansión real en sitio (AbInBev, QLYMSPROD03 a QLYMSPROD11, 2026-10-11)
 
-El sitio pasó de 2 a **9 servidores monitoreados** — `QLYMSPROD03`, `04`, `05`, `06`, `09`, `10` y
+AbInBev pasó de 2 a **9 servidores monitoreados** — `QLYMSPROD03`, `04`, `05`, `06`, `09`, `10` y
 `11` se instalaron y dieron de alta en la misma visita, usando exactamente el mismo mecanismo ya
-probado (colector + relay detrás del hub `QLYMSPROD01`, carga manual vía `.zip`).
+probado (colector + relay detrás del hub `QLYMSPROD01`, carga manual vía `.zip`). A diferencia de
+`QLYMSPROD01`/`02` (ambos en Zacatecas), los 7 nuevos están repartidos en **distintas plantas/sitios
+de AbInBev**, no todos en Zacatecas — corregido en el inventario (`grupo` por ciudad real, no
+heredado del hub) tras una revisión posterior:
+
+| Servidor | Ciudad/planta |
+| --- | --- |
+| QLYMSPROD01 | Zacatecas |
+| QLYMSPROD02 | Zacatecas |
+| QLYMSPROD03 | Apan |
+| QLYMSPROD04 | Medellín |
+| QLYMSPROD05 | Tocancipá |
+| QLYMSPROD06 | Tuxtepec |
+| QLYMSPROD09 | Valle |
+| QLYMSPROD10 | Guadalajara |
+| QLYMSPROD11 | Atlántico |
+
+El árbol del dashboard ahora muestra `AbInBev/<ciudad>` como grupo por servidor (en vez de un único
+`AbInBev/Zacatecas` para los 9) — corregido editando `grupo` en `inventario_servidores.yaml` y
+disparando la ingesta (`sincronizar_todo()` crea/reasigna los grupos solos, sin tocar la BD a mano).
+`QLYMSPROD01`/`02` siguen siendo el hub/compañero físico que relay/carga offline usan para los 7
+nuevos — la relación de relay (`es_gateway_de`, `companeros.yaml`) no cambia, solo la agrupación
+visual por cliente/ciudad en el dashboard.
 
 - **Colector**: instalado en los 7 servidores nuevos, copiando solo `monitor.py`/`config.ini`/
   `monit_servers_v2.service` (nunca `monitor.log`/`lecturas/` del origen, para no heredar logs o
@@ -426,11 +448,11 @@ probado (colector + relay detrás del hub `QLYMSPROD01`, carga manual vía `.zip
   mismo recomienda no asumir el valor de otro SKU). `QLYMSPROD10` (Quadro P620) no reporta ese
   campo (`N/A`); se estimó con margen por debajo de su "Slowdown Temp" real (100°C → ambar 95°C).
 - **Carga a central**: un solo `.zip` (`relay_AbInBev.zip`, vía `relay/empaquetar_offline.py` +
-  `scripts/desempaquetar_offline.py`) con los 9 servidores del sitio — 82 archivos offline cargados
+  `scripts/desempaquetar_offline.py`) con los 9 servidores del hub — 82 archivos offline cargados
   sin errores. El hardware se subió aparte en otro `.zip` (7 `.json` de `extraer_hardware.py`),
   importado uno por uno.
-- Sitio AbInBev Zacatecas: de 2 a **9 servidores reales operando** (`QLYMSPROD01/02/03/04/05/06/09/
-  10/11`).
+- AbInBev: de 2 a **9 servidores reales operando** (`QLYMSPROD01/02/03/04/05/06/09/10/11`),
+  repartidos en 8 ciudades/plantas distintas (tabla arriba).
 
 ### Probado ✅ (caso gateway online, automatizado en `ingesta.py`, contra servidores de prueba)
 
