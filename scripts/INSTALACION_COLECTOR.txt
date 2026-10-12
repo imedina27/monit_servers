@@ -1,0 +1,409 @@
+==============================================================================
+ MONIT_SERVERS_V2 - GUIA DE INSTALACION DE COLECTOR EN UN SERVIDOR NUEVO
+ Procedimiento completo: colector -> inventario -> hardware -> umbrales
+==============================================================================
+
+Este documento cubre el procedimiento COMPLETO para dar de alta un servidor
+Ubuntu nuevo en el sistema de monitoreo, desde instalar el colector hasta
+que aparezca con datos reales, hardware y umbrales en el dashboard.
+
+El stack central (Postgres + backend/dashboard + ingesta) vive en DOCKER,
+en el servidor DEVELOP (192.168.192.205). El dashboard es visible en:
+    http://192.168.192.205:8000
+
+Requisitos antes de empezar:
+  - Acceso SSH al servidor nuevo (el que vas a monitorear).
+  - Acceso SSH al servidor DEVELOP (donde vive el inventario central y la
+    base de datos), o a la máquina Windows desde donde administras el
+    inventario central.
+  - Saber si el servidor nuevo es alcanzable DIRECTO desde DEVELOP por red
+    (caso normal / "online") o si es un sitio offline/semi-offline (ver
+    NOTA AL FINAL - "Casos especiales: sitios offline o con relay").
+
+Este procedimiento asume el caso normal: un servidor Ubuntu simple,
+alcanzable por SSH desde DEVELOP.
+
+==============================================================================
+ PARTE 1 - INSTALAR EL COLECTOR EN EL SERVIDOR NUEVO
+==============================================================================
+
+------------------------------------------------------------------------------
+PASO 1.1 - Verificar requisitos previos (en el servidor nuevo)
+------------------------------------------------------------------------------
+
+Conéctate por SSH al servidor nuevo y verifica:
+
+    # Python 3 (normalmente ya viene instalado)
+    python3 --version
+
+    # CPU Intel/AMD: instalar lm-sensors
+    sudo apt install lm-sensors
+    sudo sensors-detect
+    # Responde "yes"/Enter a las preguntas por defecto. Al final pregunta si
+    # quiere agregar módulos a /etc/modules -- acepta (yes).
+
+    # CPU ARM: no se requiere nada adicional, el colector usa
+    # /sys/class/thermal del kernel directamente (thermal_zones).
+
+    # GPU NVIDIA (si aplica, opcional): confirma que el driver expone
+    # nvidia-smi:
+    nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits
+
+Para verificar manualmente qué método va a detectar el colector:
+
+    sensors                                      # CPU Intel/AMD (lm-sensors)
+    ls /sys/class/thermal/ | grep thermal_zone   # CPU ARM (fallback)
+
+Si ninguno de los dos da resultado, el colector no podrá leer temperatura
+de CPU y abortará con un mensaje claro al correrlo (ver paso 1.3). GPU es
+opcional -- un servidor sin GPU simplemente no genera esos sensores.
+
+NOTA: el mismo colector ya lee también el USO DE DISCO por punto de montaje
+(vía /proc/mounts) -- no hace falta instalar nada aparte para eso, viene
+incluido en monitor.py.
+
+------------------------------------------------------------------------------
+PASO 1.2 - Copiar los archivos del colector al servidor
+------------------------------------------------------------------------------
+
+Copia la carpeta "colector_ubuntu/" completa (monitor.py, config.ini,
+monit_servers_v2.service) al servidor nuevo, por ejemplo vía scp/SFTP a:
+
+    /home/<usuario>/check/monit_servers_v2/colector_ubuntu/
+
+(usa el usuario real de ese servidor -- "quantum" es el usuario estándar en
+los servidores propios de Quantum, pero en servidores de cliente puede ser
+otro, ej. "h0017909" en AbInBev).
+
+------------------------------------------------------------------------------
+PASO 1.3 - Configurar config.ini
+------------------------------------------------------------------------------
+
+Edita colector_ubuntu/config.ini en el servidor:
+
+    [monitoreo]
+    intervalo_minutos = 60
+
+    [almacenamiento]
+    directorio_salida = /home/<usuario>/check/monit_servers_v2/colector_ubuntu/lecturas
+
+IMPORTANTE: "directorio_salida" debe coincidir EXACTAMENTE con el
+"directorio_remoto" que vas a poner en el inventario central (parte 2,
+paso 2.1). Si no coinciden, la ingesta nunca va a encontrar los archivos
+(falla en silencio, sin error visible).
+
+------------------------------------------------------------------------------
+PASO 1.4 - Probar el colector manualmente ANTES de instalar el servicio
+------------------------------------------------------------------------------
+
+    cd /home/<usuario>/check/monit_servers_v2/colector_ubuntu
+    python3 monitor.py
+
+Revisa en otra terminal (o Ctrl+C después de confirmar):
+
+    tail -f monitor.log
+    ls lecturas/
+
+"monitor.log" debe indicar el método de CPU detectado (lm-sensors o
+thermal_zones) y debe empezar a aparecer un archivo "lecturas_<fecha>.csv"
+(y "disco_<fecha>.csv") en la carpeta lecturas/. Detén con Ctrl+C una vez
+confirmado que funciona.
+
+Si aborta con "No se encontro ningun metodo de lectura de temperatura":
+revisa el paso 1.1 (lm-sensors / thermal_zones).
+
+------------------------------------------------------------------------------
+PASO 1.5 - Instalar el servicio systemd (para que corra solo, siempre)
+------------------------------------------------------------------------------
+
+Edita monit_servers_v2.service si el usuario o las rutas reales difieren de
+"quantum"/"check/monit_servers_v2":
+
+    nano monit_servers_v2.service
+
+    sudo cp monit_servers_v2.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable monit_servers_v2
+    sudo systemctl start monit_servers_v2
+    sudo systemctl status monit_servers_v2
+
+Debe quedar "active (running)". Comandos útiles:
+
+    sudo systemctl start|stop|restart|status monit_servers_v2
+    journalctl -u monit_servers_v2 -f
+
+  ADVERTENCIA 1: el nombre del servicio es "monit_servers_v2", DISTINTO del
+  servicio viejo "monit_servers" (proyecto anterior), que puede seguir
+  activo en el mismo servidor durante una transición. No lo detengas ni lo
+  reemplaces sin confirmar antes -- ambos pueden convivir sin conflicto.
+
+  ADVERTENCIA 2 (bug conocido, ya corregido en la plantilla, NO lo repitas):
+  NO agregues "StandardOutput=append:.../monitor.log" ni "StandardError=..."
+  al .service. systemd crearía ese archivo él mismo como root ANTES de
+  bajar privilegios al usuario configurado, y como monitor.py también lo
+  abre por su cuenta (logging.basicConfig), el segundo intento choca contra
+  el dueño root y el servicio entra en loop de reinicio con
+  PermissionError. La plantilla actual ya NO trae esas líneas, a propósito
+  -- no las vuelvas a poner.
+
+  Si el servicio queda "activating (auto-restart)" en vez de
+  "active (running)", revisa el dueño de monitor.log:
+
+    sudo chown <usuario>:<usuario> monitor.log
+    sudo systemctl restart monit_servers_v2
+
+  ADVERTENCIA 3 (Python de conda): si el servidor tiene un ambiente conda
+  activo en el shell interactivo pero instalaste paquetes con pip mientras
+  ese ambiente estaba activo, "ExecStart=/usr/bin/python3" del .service
+  puede NO ver esos paquetes. El colector en sí (monitor.py) solo usa
+  librerías estándar de Python, así que normalmente no aplica -- pero sí
+  aplica si más adelante instalas "relay.py" en este mismo servidor (ver
+  nota al final).
+
+==============================================================================
+ PARTE 2 - DAR DE ALTA EL SERVIDOR EN EL INVENTARIO CENTRAL
+==============================================================================
+
+Esto se hace en la máquina/lugar donde vive "inventario_servidores.yaml"
+real (el archivo que usa la ingesta en DEVELOP -- hoy montado como volumen
+de Docker desde /opt/quantum/monit-servers-v2/inventario_servidores.yaml).
+
+------------------------------------------------------------------------------
+PASO 2.1 - Agregar la entrada al inventario
+------------------------------------------------------------------------------
+
+Abre inventario_servidores.yaml y agrega un bloque nuevo (copia el patrón de
+un servidor ya existente):
+
+    - nombre: <NOMBRE_SERVIDOR>
+      grupo: <Cliente>/<Sitio>        # ej. "Quantum", "AbInBev/Zacatecas"
+      sistema_operativo: ubuntu
+      activo: true
+      ip: <ip_real>
+      puerto: 22
+      usuario: <usuario_ssh>
+      password: <password_ssh>
+      directorio_remoto: /home/<usuario>/check/monit_servers_v2/colector_ubuntu/lecturas
+
+  - "nombre" debe ser único y es el identificador que vas a usar en TODOS
+    los pasos siguientes (hardware, umbrales, el hostname del JSON, etc.)
+  - "directorio_remoto" debe ser IDÉNTICO al "directorio_salida" del
+    config.ini del paso 1.3.
+  - "grupo" define dónde aparece en el árbol del dashboard (se crean los
+    niveles que falten automáticamente, no hay que darlos de alta a mano).
+
+Guarda el archivo. Si editas directo en DEVELOP:
+
+    nano /opt/quantum/monit-servers-v2/inventario_servidores.yaml
+
+(el archivo ya tiene permisos 600 por traer contraseñas reales -- no hace
+falta volver a ponerlos a menos que lo hayas recreado).
+
+------------------------------------------------------------------------------
+PASO 2.2 - Disparar la ingesta una vez (para que se sincronice el inventario)
+------------------------------------------------------------------------------
+
+Agregar un servidor al YAML NO lo da de alta solo en la base de datos --
+necesita que corra la ingesta una vez (automático, no hay que tocar nada
+del backend). Dos formas:
+
+  a) Esperar el ciclo automático de Ofelia (corre cada hora, en punto).
+
+  b) Dispararlo ya mismo, sin esperar -- botón "Actualizar" en el dashboard
+     (http://192.168.192.205:8000), o directo contra la API:
+
+        curl -X POST http://192.168.192.205:8000/api/ingesta/ejecutar
+
+Verifica que el servidor nuevo ya aparece en el árbol del dashboard
+(columna derecha) dentro del grupo que configuraste. Si tiene datos reales
+ya generados por el colector (parte 1), también debe mostrar temperatura y
+uso de disco.
+
+  NOTA: quitar un servidor del YAML NO lo borra de la base de datos (la
+  sincronización nunca borra). Para dar de baja un servidor por completo
+  más adelante, usa "db/gestionar_servidor.py baja <nombre>" (ver parte 4).
+
+==============================================================================
+ PARTE 3 - EXTRAER Y CARGAR EL HARDWARE (extraer_hardware.py)
+==============================================================================
+
+Este paso es opcional pero recomendado -- llena la ficha técnica de
+hardware del dashboard (chasis, CPU, GPU, RAM/DIMMs, discos, RAID). Se hace
+UNA SOLA VEZ por servidor (o de nuevo si cambia el hardware físico).
+
+------------------------------------------------------------------------------
+PASO 3.1 - Correr extraer_hardware.py EN el servidor nuevo
+------------------------------------------------------------------------------
+
+Copia scripts/extraer_hardware.py al servidor (scp/SFTP, o pégalo
+directo con nano -- es un solo archivo, sin dependencias externas, solo
+librería estándar de Python).
+
+Córrelo CON sudo (importante -- sin sudo, el detalle de RAM por DIMM y el
+número de serie del chasis quedan vacíos; el resto del reporte sale igual):
+
+    sudo python3 extraer_hardware.py
+
+  NOTA (Ubuntu no tiene alias "python" -> "python3" por defecto): si te da
+  "python: command not found", usa "python3" explícito como arriba.
+
+Esto genera un archivo "<hostname>.json" en el directorio actual (el
+hostname real del servidor, vía socket.gethostname() -- debe coincidir, sin
+importar mayúsculas/minúsculas, con el "nombre" que pusiste en el
+inventario en el paso 2.1; si no coincide, el import del paso 3.3 falla).
+
+Es de SOLO LECTURA: no instala nada ni modifica el servidor.
+
+Si el script avisa "no se corrio como root" o "sin GPU detectada", revisa
+que sea lo esperado para ese servidor antes de continuar.
+
+------------------------------------------------------------------------------
+PASO 3.2 - Traer el .json a tu máquina
+------------------------------------------------------------------------------
+
+Descarga el archivo "<hostname>.json" generado en el paso anterior a tu
+máquina Windows -- por scp, SFTP (ej. MobaXterm/WinSCP) o el medio que
+tengas disponible para ese servidor.
+
+  Si el servidor se corrió el script con sudo y al descargar por
+  MobaXterm/WinSCP te da "Permission denied": el archivo quedó con dueño
+  "root" (por haberse corrido con sudo). Arréglalo ANTES de descargar:
+
+    sudo chown <tu_usuario>:<tu_usuario> <hostname>.json
+
+Guárdalo en tu máquina, por ejemplo en: relay\zips\ (o cualquier carpeta
+temporal que uses para este tipo de archivos).
+
+------------------------------------------------------------------------------
+PASO 3.3 - Importar el .json a la base de datos (en DEVELOP, vía Docker)
+------------------------------------------------------------------------------
+
+El puerto de Postgres en DEVELOP NO está expuesto a la red (decisión de
+seguridad), así que este script no se puede correr directo desde Windows
+apuntando a DEVELOP. El patrón que se usa es: subir el script y el .json
+al contenedor del backend con "docker cp", y correrlo ahí adentro (el
+contenedor ya tiene DB_HOST=postgres configurado, se conecta solo).
+
+Desde una sesión SSH a DEVELOP (o copiando ambos pasos a un script, como
+prefieras):
+
+    # 1) Copiar el script de administración al contenedor (no viene
+    #    incluido en la imagen del backend, solo backend/dashboard/ingesta)
+    docker cp /opt/quantum/monit-servers-v2/db/gestionar_servidor.py \
+        monit-servers-v2-backend:/tmp/gestionar_servidor.py
+
+    # 2) Copiar el .json del servidor nuevo al contenedor
+    docker cp <hostname>.json \
+        monit-servers-v2-backend:/tmp/<hostname>.json
+
+    # 3) Importarlo
+    cd /opt/quantum/monit-servers-v2/docker
+    docker compose exec backend python /tmp/gestionar_servidor.py importar /tmp/<hostname>.json
+
+Debe imprimir algo como:
+
+    Importando a '<NOMBRE_SERVIDOR>' (id N) desde /tmp/<hostname>.json ...
+      chasis: actualizado
+      cpu: actualizado
+      gpu: actualizado (...)
+      ram: actualizado
+      dimms: N modulo(s)          <- o "el .json no trae detalle" si no corrió como root
+      discos: N
+      raid (software): N arreglo(s)   <- solo si tiene
+
+Si da "No existe ningun servidor que coincida con el hostname...": revisa
+que el "nombre" del inventario (paso 2.1) coincida con el hostname real del
+servidor (sin importar mayúsculas/minúsculas), y que ya hayas corrido la
+ingesta al menos una vez (paso 2.2) para que el servidor exista en Postgres.
+
+Verifica el resultado en el dashboard -- la ficha técnica de hardware
+(debajo de "Todos los sensores") debe aparecer ya con los datos reales.
+
+==============================================================================
+ PARTE 4 - CONFIGURAR UMBRALES DE TEMPERATURA (opcional)
+==============================================================================
+
+Sin este paso, el servidor usa el default genérico (CPU 70/85°C, GPU
+75/85°C en backend/main.py) -- suficiente para empezar, pero no es
+específico al modelo real de CPU/GPU de este servidor.
+
+Para poner un umbral propio (recomendado si investigaste el TCASE/Tjmax
+real del CPU o la temperatura máxima de operación real de la GPU):
+
+    docker cp /opt/quantum/monit-servers-v2/db/gestionar_servidor.py \
+        monit-servers-v2-backend:/tmp/gestionar_servidor.py   # si no lo copiaste ya
+
+    cd /opt/quantum/monit-servers-v2/docker
+    docker compose exec backend python /tmp/gestionar_servidor.py umbrales <NOMBRE_SERVIDOR>
+
+Es interactivo -- pide 4 valores en orden (Enter en blanco deja el default
+genérico para ese componente):
+
+    -- CPU --
+    verde_max: <ej. 70>
+    ambar_max: <ej. 81>
+    -- GPU --
+    verde_max: <ej. 70>
+    ambar_max: <ej. 80>
+
+(verde = hasta ese valor; ámbar = entre verde_max y ambar_max; rojo = por
+encima de ambar_max)
+
+Si necesitas correrlo sin interacción (ej. desde un script), se le puede
+dar la entrada por stdin en orden, un valor por línea:
+
+    printf '70\n81\n70\n80\n' | docker compose exec -T backend python /tmp/gestionar_servidor.py umbrales <NOMBRE_SERVIDOR>
+
+==============================================================================
+ PARTE 5 - VERIFICACION FINAL
+==============================================================================
+
+Antes de dar por terminada la instalación, confirma:
+
+  [ ] El servicio systemd está "active (running)" en el servidor nuevo
+      (sudo systemctl status monit_servers_v2).
+  [ ] monitor.log muestra el método de CPU detectado y lecturas generándose
+      cada "intervalo_minutos".
+  [ ] El servidor aparece en el árbol del dashboard, dentro del grupo
+      correcto.
+  [ ] "Estado actual" muestra temperaturas reales (no "-- °C").
+  [ ] La sección de "Uso de disco" muestra los puntos de montaje reales.
+  [ ] (Si hiciste la parte 3) La ficha de hardware debajo de "Todos los
+      sensores" muestra chasis/CPU/GPU/RAM/discos reales.
+  [ ] (Si hiciste la parte 4) El semáforo de temperatura usa los umbrales
+      específicos, no el genérico (puedes confirmarlo comparando contra los
+      valores que pusiste).
+
+==============================================================================
+ NOTA AL FINAL - CASOS ESPECIALES: SITIOS OFFLINE O CON RELAY
+==============================================================================
+
+Este documento cubre el caso normal (servidor simple, alcanzable por SSH
+directo desde DEVELOP). Hay 2 casos especiales que cambian la PARTE 2 (el
+colector de la parte 1 y el hardware/umbrales de las partes 3-4 se instalan
+exactamente igual en todos los casos):
+
+  1. SERVIDOR SIMPLE, OFFLINE (sin compañeros, sin relay): en el inventario
+     va con "activo: false" y sin credenciales de conexión. La carga de
+     datos a Postgres es manual, copiando los .csv a
+     "ingesta/pendientes_offline/<nombre_servidor>/" en DEVELOP y disparando
+     la ingesta (botón "Actualizar" o curl, igual que el paso 2.2).
+
+  2. SITIO CON VARIOS SERVIDORES (un "hub" 100% offline, ej. AbInBev; o un
+     "gateway" online que ve a sus compañeros en su LAN, ej.
+     API/Manzanillo): requiere instalar también "relay/relay.py" en el
+     hub/gateway, además del colector en cada compañero. Ver el README.md
+     del proyecto, sección "Relay (sitios offline con compañeros, o con
+     gateway online)" para el procedimiento completo (companeros.yaml,
+     monit_servers_v2_relay.service, campos "directorio_relay"/
+     "es_gateway_de" en el inventario).
+
+     Para subir un bundle consolidado de un sitio 100% offline sin copiar
+     carpeta por carpeta a mano, usa en el hub
+     "relay/empaquetar_offline.py" (arma un .zip) y en tu máquina
+     "scripts/desempaquetar_offline.py" (lo sube a DEVELOP y dispara la
+     ingesta) -- ver README.md.
+
+==============================================================================
+ FIN DEL DOCUMENTO
+==============================================================================
