@@ -41,12 +41,16 @@
     --ambar: #E0902E;
     --rojo: #D9534F;
 
-    /* Paleta categorica para series de graficas (no para semaforo).
-       Slots 1/3/4 de la paleta validada del dataviz skill: se salta
-       el slot 2 (naranja) a proposito porque colisiona con --acento. */
+    /* Paleta categorica para series de graficas (no para semaforo). Los
+       slots 2/3/4 (naranja/aqua/amarillo) de la paleta validada del dataviz
+       skill colisionaban visualmente con --acento y con el semaforo
+       (verde/ambar), asi que se cambiaron GPU 0/GPU 1 a slot 7 (violeta,
+       si validado en la paleta) y a un teal a medida (no corrido por el
+       validador del skill -- no hay Node.js en esta maquina) que se aleja
+       mas del verde del semaforo que el "aqua" original. */
     --serie-1: #3987e5; /* CPU (promedio) */
-    --serie-2: #199e70; /* GPU 0 */
-    --serie-3: #c98500; /* GPU 1 */
+    --serie-2: #9085e9; /* GPU 0 (morado) */
+    --serie-3: #2dd4bf; /* GPU 1 (teal) */
 
     --fondo: #040918;
     --superficie: #0D1326;
@@ -65,8 +69,8 @@
     --borde: #E1E0D9;
 
     --serie-1: #2a78d6;
-    --serie-2: #1baf7a;
-    --serie-3: #eda100;
+    --serie-2: #6250d6; /* GPU 0 (morado) */
+    --serie-3: #0d9488; /* GPU 1 (teal) */
 }
 
 * {
