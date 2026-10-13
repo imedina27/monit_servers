@@ -12,6 +12,13 @@ Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
 
 ### Fixed
 
+- `/api/servidores/{nombre}/historico` y `/disco/historico` ya no agregaban TODO el
+  histórico de la tabla en cada carga — en servidores con meses de datos (`DEVELOP`,
+  `MINI_LENOVO`) eso tardaba 1.5-3.4s por clic en el árbol, dejando la info del servidor
+  anterior congelada en pantalla mientras tanto. Ahora cada endpoint acepta `completo`
+  (bool) y por defecto limita la ventana según la agrupación ("hora" 30 días, "día" 1 año,
+  "mes" sin límite); el dashboard pide el resto en una sola petición de respaldo solo si
+  el usuario arrastra el desplazador/slider hasta el borde más viejo ya cargado.
 - Umbral de "lectura obsoleta" (el que marca `--°C` en vez del valor real) subido de 3h
   a 24h — sitios 100% offline como AbInBev se descargan ~1 vez al día, no cada hora.
 - La tarjeta "CPU (máx.)" podía marcarse como obsoleta (`--°C`) por un solo sensor

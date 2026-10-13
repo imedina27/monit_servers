@@ -598,6 +598,43 @@ consultarlos a mano.
 
 **Paso 17 cerrado.**
 
+## 18. Rendimiento del histórico (temperatura y disco) ✅
+
+A petición del usuario: cambiar de servidor en el dashboard tardaba visiblemente (hasta
+2-3s en algunos casos), dejando la información del servidor anterior congelada en
+pantalla mientras tanto.
+
+### Investigado y corregido ✅ (2026-10-12)
+
+- **Causa raíz**: `/api/servidores/{nombre}/historico` no tenía ningún límite de fecha —
+  cada carga hacía `GROUP BY` sobre TODA la tabla `lecturas` del servidor, a diferencia de
+  `/disco/historico` que sí limitaba a 1 año. Medido directamente contra `DEVELOP`: 3.4s y
+  69,630 filas con agrupación "hora" (la que se pide por defecto al seleccionar un
+  servidor), vs. 0.25-0.4s en servidores con solo ~12 días de datos (AbInBev/Colima).
+- **Hipótesis descartada con evidencia**: se asumió inicialmente que la lentitud venía de
+  histórico migrado de +1 año del proyecto viejo. Al comparar `completo=true` contra el
+  límite de 1 año (misma cantidad de filas en ambos casos) se confirmó que el histórico
+  real de `DEVELOP`/`MINI_LENOVO` apenas llega a 8 meses — el volumen viene de llevar más
+  tiempo monitoreándose que los sitios nuevos, no de datos viejos. El problema está
+  concentrado específicamente en la agrupación "hora" (con "día", `DEVELOP` responde en
+  0.46s con solo 2,924 filas, sin límite alguno).
+- **Fix**: ventana por defecto ahora por agrupación (`VENTANA_HISTORICO_DIAS` en
+  `backend/main.py`) — "hora" 30 días (único caso realmente pensado para ver detalle
+  reciente), "día" 1 año (ya era rápida, se deja holgada a futuro), "mes" sin límite. Se
+  aplicó la misma lógica a `/disco/historico` (antes tenía su propio cap fijo de 1 año sin
+  forma de pedir más) porque el uso de disco se sigue acumulando igual que la temperatura
+  — decisión explícita del usuario para no resolver el mismo problema dos veces.
+- **Dashboard**: tanto el desplazador de la gráfica de temperatura como el slider de uso
+  de disco ahora piden el histórico completo (`cargarHistoricoCompleto` /
+  `cargarDiscoHistoricoCompleto`) en una sola petición de respaldo, solo cuando el usuario
+  arrastra/hace clic más allá del borde más viejo ya cargado — no hay paginación genérica,
+  solo ese fallback puntual. El refresco automático (cada 5 min) respeta ese estado para
+  no recortar la vista de vuelta a la ventana por defecto.
+- **Verificado en DEVELOP tras el despliegue**: `DEVELOP` bajó de 2.6-3.4s a 0.67s,
+  `MINI_LENOVO` de 1.5-1.7s a 0.46s, en ambos casos para la carga por defecto de "hora".
+
+**Paso 18 cerrado.**
+
 ## Pendiente de decidir
 
 - ~~Valores exactos de los umbrales de temperatura para el semáforo (paso 6, backend).~~ Resuelto el 2026-10-05 — umbral por servidor en Postgres (tabla `umbrales`), con valores investigados por modelo real de CPU/GPU (Intel ARK, AMD, NVIDIA; algunos estimados por convención de generación donde el fabricante no publica Tjmax exacto por SKU). El default genérico (70/85°C CPU, 75/85°C GPU) se queda como fallback en `backend/main.py` para servidores sin hardware identificado todavía (ej. QLYMSPROD01/02 de AbInBev, sitio offline sin acceso).
