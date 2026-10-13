@@ -258,20 +258,35 @@ def uso_disco_historico(nombre: str, agrupacion: str = Query("dia", pattern="^(h
 
 
 @app.get("/api/servidores/{nombre}/historico")
-def historico(nombre: str, agrupacion: str = Query("hora", pattern="^(hora|dia|mes)$")):
+def historico(
+    nombre: str,
+    agrupacion: str = Query("hora", pattern="^(hora|dia|mes)$"),
+    completo: bool = Query(False),
+):
     unidad_sql = {"hora": "hour", "dia": "day", "mes": "month"}[agrupacion]
+
+    # "hora"/"dia" pueden acumular muchisimas filas en servidores con años de
+    # historico (ej. DEVELOP, con datos migrados del proyecto viejo) -- sin
+    # limite, el GROUP BY sobre toda la tabla tarda varios segundos y el
+    # dashboard se siente trabado al cambiar de servidor. Por defecto se
+    # limita a 1 año; el dashboard pide el resto (completo=true) solo si el
+    # usuario arrastra el desplazador hasta el borde mas viejo ya cargado.
+    # "mes" ya es tan agregado (un punto por mes) que nunca vale la pena
+    # limitarlo.
+    limitar_por_fecha = not completo and agrupacion != "mes"
+    filtro_fecha = "AND medido_en >= now() - interval '1 year'" if limitar_por_fecha else ""
 
     with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
         servidor_id = obtener_servidor_id(cur, nombre)
         cur.execute(
-            """
+            f"""
             SELECT
                 componente,
                 sensor,
                 date_trunc(%s, medido_en) AS periodo,
                 AVG(temperatura_c)::numeric(5,1) AS temperatura_promedio
             FROM lecturas
-            WHERE servidor_id = %s
+            WHERE servidor_id = %s {filtro_fecha}
             GROUP BY componente, sensor, periodo
             ORDER BY periodo
             """,

@@ -22,6 +22,7 @@ const estado = {
     rangoDatos: null,      // {inicio, fin} en ms: todo el historico disponible para servidor+agrupacion actuales
     ventanaMs: null,       // ancho de la ventana visible actual, en ms
     finVentana: null,      // extremo derecho (mas reciente) de la ventana visible, en ms
+    historicoCompleto: false, // false = solo se cargo el ultimo año (ver cargarHistorico/cargarHistoricoCompleto)
     discoHistorico: null,  // [{periodo, montajes}], ya ordenado por fecha -- el slider solo indexa esto
     discoIndice: 0,        // posicion actual del slider dentro de discoHistorico
 };
@@ -517,6 +518,10 @@ async function cargarHistorico() {
     if (!estado.servidor) return;
     const svg = document.getElementById("grafica");
 
+    // El backend ya devuelve "mes" completo siempre (ver /historico) -- para
+    // "hora"/"dia" solo se tiene el ultimo año hasta que el usuario pida mas.
+    estado.historicoCompleto = estado.agrupacion === "mes";
+
     try {
         const filas = await obtenerJSON(
             `${API}/servidores/${encodeURIComponent(estado.servidor)}/historico?agrupacion=${estado.agrupacion}`
@@ -559,8 +564,11 @@ async function cargarHistorico() {
 async function refrescarHistorico() {
     if (!estado.servidor || !estado.rangoDatos) return;
     try {
+        // Si ya se habia cargado el historico completo (el usuario llego al
+        // borde del desplazador), hay que seguir pidiendolo completo -- si no,
+        // el refresco automatico lo recortaria de vuelta al ultimo año.
         const filas = await obtenerJSON(
-            `${API}/servidores/${encodeURIComponent(estado.servidor)}/historico?agrupacion=${estado.agrupacion}`
+            `${API}/servidores/${encodeURIComponent(estado.servidor)}/historico?agrupacion=${estado.agrupacion}${estado.historicoCompleto ? "&completo=true" : ""}`
         );
         if (filas.length === 0) return;
 
@@ -574,6 +582,32 @@ async function refrescarHistorico() {
 
         actualizarVista();
     } catch (e) {
+        console.error(e);
+    }
+}
+
+// Carga el historico sin limite de fecha -- se llama una sola vez, cuando el
+// usuario arrastra/hace clic en el desplazador intentando ir mas atras del
+// borde mas viejo ya cargado (ver initDesplazador). Preserva la ventana/zoom
+// actual, solo extiende estado.rangoDatos hacia atras.
+async function cargarHistoricoCompleto() {
+    if (!estado.servidor || estado.historicoCompleto) return;
+    estado.historicoCompleto = true; // evita pedidos repetidos mientras esta en vuelo
+
+    try {
+        const filas = await obtenerJSON(
+            `${API}/servidores/${encodeURIComponent(estado.servidor)}/historico?agrupacion=${estado.agrupacion}&completo=true`
+        );
+        if (filas.length === 0) return;
+
+        estado.filasHistorico = filas;
+        estado.seriesCompletas = construirSeries(filas);
+        const todosMs = estado.seriesCompletas.flatMap(s => s.puntos.map(p => new Date(p.periodo).getTime()));
+        estado.rangoDatos = { inicio: Math.min(...todosMs), fin: Math.max(...todosMs) };
+
+        actualizarVista();
+    } catch (e) {
+        estado.historicoCompleto = false; // no se pudo, reintentar en el siguiente intento de arrastre
         console.error(e);
     }
 }
@@ -656,6 +690,10 @@ function initDesplazador() {
         const rangoTotal = estado.rangoDatos.fin - estado.rangoDatos.inicio;
         const deltaMs = ((clientX - inicioArrastreX) / desplazador.clientWidth) * rangoTotal;
         let nuevoInicio = inicioVentanaAlArrastrar + deltaMs;
+        // Si el usuario arrastra mas alla del borde mas viejo ya cargado,
+        // pide el historico completo (ver cargarHistoricoCompleto) en vez de
+        // simplemente dejarlo topado ahi sin explicacion.
+        if (nuevoInicio < estado.rangoDatos.inicio) cargarHistoricoCompleto();
         nuevoInicio = Math.max(estado.rangoDatos.inicio, Math.min(estado.rangoDatos.fin - estado.ventanaMs, nuevoInicio));
         estado.finVentana = nuevoInicio + estado.ventanaMs;
         actualizarVista();
@@ -680,6 +718,7 @@ function initDesplazador() {
         const fraccion = (ev.clientX - rect.left) / rect.width;
         const rangoTotal = estado.rangoDatos.fin - estado.rangoDatos.inicio;
         let nuevoInicio = estado.rangoDatos.inicio + fraccion * rangoTotal - estado.ventanaMs / 2;
+        if (nuevoInicio < estado.rangoDatos.inicio) cargarHistoricoCompleto();
         nuevoInicio = Math.max(estado.rangoDatos.inicio, Math.min(estado.rangoDatos.fin - estado.ventanaMs, nuevoInicio));
         estado.finVentana = nuevoInicio + estado.ventanaMs;
         actualizarVista();
