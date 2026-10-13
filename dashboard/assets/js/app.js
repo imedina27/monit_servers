@@ -22,9 +22,10 @@ const estado = {
     rangoDatos: null,      // {inicio, fin} en ms: todo el historico disponible para servidor+agrupacion actuales
     ventanaMs: null,       // ancho de la ventana visible actual, en ms
     finVentana: null,      // extremo derecho (mas reciente) de la ventana visible, en ms
-    historicoCompleto: false, // false = solo se cargo el ultimo año (ver cargarHistorico/cargarHistoricoCompleto)
+    historicoCompleto: false, // false = solo se cargo la ventana por defecto (ver cargarHistorico/cargarHistoricoCompleto)
     discoHistorico: null,  // [{periodo, montajes}], ya ordenado por fecha -- el slider solo indexa esto
     discoIndice: 0,        // posicion actual del slider dentro de discoHistorico
+    discoCompleto: false,  // false = solo se cargo la ventana por defecto (ver cargarUsoDiscoHistorico/cargarDiscoHistoricoCompleto)
 };
 
 // ─── Tema (claro/oscuro) ───────────────────────────────────────────────────
@@ -307,6 +308,11 @@ async function cargarUsoDiscoHistorico() {
     const contenedorDisco = document.getElementById("disco-contenido");
     const contenedorSlider = document.getElementById("disco-slider-contenedor");
 
+    // Mismo mecanismo que la grafica de temperatura (ver cargarHistorico):
+    // "mes" ya viene completo del backend, "hora"/"dia" solo traen la
+    // ventana por defecto hasta que el usuario llegue al extremo del slider.
+    estado.discoCompleto = estado.agrupacion === "mes";
+
     try {
         const historico = await obtenerJSON(
             `${API}/servidores/${encodeURIComponent(estado.servidor)}/disco/historico?agrupacion=${estado.agrupacion}`
@@ -350,9 +356,44 @@ function renderDiscoSlider() {
 document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("disco-slider").addEventListener("input", (ev) => {
         estado.discoIndice = Number(ev.target.value);
+        // Llegar al extremo izquierdo (el punto mas viejo ya cargado) pide
+        // el historico de disco completo, igual que el desplazador de la
+        // grafica de temperatura (ver cargarDiscoHistoricoCompleto).
+        if (estado.discoIndice === 0) cargarDiscoHistoricoCompleto();
         renderDiscoSlider();
     });
 });
+
+// Carga el historico de disco sin limite de fecha -- se llama una sola vez,
+// cuando el usuario arrastra el slider hasta el punto mas viejo ya cargado.
+// Preserva el periodo que se estaba viendo (el indice cambia porque ahora
+// hay periodos mas viejos al inicio del arreglo).
+async function cargarDiscoHistoricoCompleto() {
+    if (!estado.servidor || estado.discoCompleto) return;
+    estado.discoCompleto = true; // evita pedidos repetidos mientras esta en vuelo
+
+    try {
+        const historico = await obtenerJSON(
+            `${API}/servidores/${encodeURIComponent(estado.servidor)}/disco/historico?agrupacion=${estado.agrupacion}&completo=true`
+        );
+        if (historico.length === 0) return;
+
+        const periodoActual = estado.discoHistorico[estado.discoIndice]?.periodo;
+        estado.discoHistorico = historico;
+        const nuevoIndice = historico.findIndex(p => p.periodo === periodoActual);
+        estado.discoIndice = nuevoIndice >= 0 ? nuevoIndice : 0;
+
+        const slider = document.getElementById("disco-slider");
+        slider.max = String(historico.length - 1);
+        slider.value = String(estado.discoIndice);
+        document.getElementById("disco-slider-contenedor").hidden = historico.length <= 1;
+
+        renderDiscoSlider();
+    } catch (e) {
+        estado.discoCompleto = false; // no se pudo, reintentar en el siguiente intento
+        console.error(e);
+    }
+}
 
 // ─── Estado actual (tarjetas + tabla) ──────────────────────────────────────
 async function cargarActual() {
@@ -518,8 +559,9 @@ async function cargarHistorico() {
     if (!estado.servidor) return;
     const svg = document.getElementById("grafica");
 
-    // El backend ya devuelve "mes" completo siempre (ver /historico) -- para
-    // "hora"/"dia" solo se tiene el ultimo año hasta que el usuario pida mas.
+    // El backend ya devuelve "mes" completo siempre (ver VENTANA_HISTORICO_DIAS
+    // en main.py) -- para "hora"/"dia" solo se tiene la ventana por defecto
+    // (30 dias / 1 año) hasta que el usuario pida mas.
     estado.historicoCompleto = estado.agrupacion === "mes";
 
     try {

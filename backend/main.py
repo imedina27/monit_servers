@@ -28,6 +28,23 @@ UMBRALES_DEFAULT = {
 # hay override por servidor como en CPU/GPU (no se ha pedido esa necesidad).
 UMBRAL_DISCO = {"verde_max": 70, "ambar_max": 90}
 
+# Ventana por defecto (dias) para /historico y /disco/historico, por
+# agrupacion -- evita escanear/agregar TODO el historico en cada carga
+# (temperatura y disco se siguen acumulando indefinidamente, ver paso donde
+# se detecto que "hora" llegaba a tardar 2-3s en servidores con meses de
+# datos, ej. DEVELOP). None = sin limite. "hora" es la unica vista pensada
+# para detalle reciente, por eso es la mas angosta; "dia" se deja holgado
+# (1 año) porque ya es barata incluso sin limite; "mes" nunca hace falta
+# acotarla (un punto por mes). El dashboard pide el resto (completo=true)
+# solo si el usuario navega mas alla del borde mas viejo ya cargado.
+VENTANA_HISTORICO_DIAS = {"hora": 30, "dia": 365, "mes": None}
+
+
+def filtro_fecha_historico(agrupacion: str, completo: bool) -> str:
+    dias = None if completo else VENTANA_HISTORICO_DIAS[agrupacion]
+    return f"AND medido_en >= now() - interval '{dias} days'" if dias else ""
+
+
 app = FastAPI(title="Monit Servers V2 - API")
 
 
@@ -219,24 +236,30 @@ def hardware_servidor(nombre: str):
 
 
 @app.get("/api/servidores/{nombre}/disco/historico")
-def uso_disco_historico(nombre: str, agrupacion: str = Query("dia", pattern="^(hora|dia|mes)$")):
+def uso_disco_historico(
+    nombre: str,
+    agrupacion: str = Query("dia", pattern="^(hora|dia|mes)$"),
+    completo: bool = Query(False),
+):
     """
     Un snapshot por periodo (hora/dia/mes) -- la ultima lectura de cada punto
-    de montaje dentro de ese periodo, hasta 1 año atras. El dashboard pide
-    esto una sola vez por agrupacion y el slider de fecha solo indexa el
-    arreglo ya descargado (sin pedir de nuevo en cada arrastre).
+    de montaje dentro de ese periodo (ver VENTANA_HISTORICO_DIAS para el
+    limite por defecto). El dashboard pide esto una vez por agrupacion y el
+    slider de fecha solo indexa el arreglo ya descargado -- vuelve a pedir
+    con completo=true solo si el usuario navega mas alla del borde cargado.
     """
     unidad_sql = {"hora": "hour", "dia": "day", "mes": "month"}[agrupacion]
+    filtro_fecha = filtro_fecha_historico(agrupacion, completo)
 
     with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
         servidor_id = obtener_servidor_id(cur, nombre)
         cur.execute(
-            """
+            f"""
             SELECT DISTINCT ON (punto_montaje, periodo)
                 date_trunc(%s, medido_en) AS periodo,
                 volumen, punto_montaje, usado_gb, total_gb
             FROM uso_disco
-            WHERE servidor_id = %s AND medido_en >= now() - interval '1 year'
+            WHERE servidor_id = %s {filtro_fecha}
             ORDER BY punto_montaje, periodo, medido_en DESC
             """,
             (unidad_sql, servidor_id),
@@ -264,17 +287,7 @@ def historico(
     completo: bool = Query(False),
 ):
     unidad_sql = {"hora": "hour", "dia": "day", "mes": "month"}[agrupacion]
-
-    # "hora"/"dia" pueden acumular muchisimas filas en servidores con años de
-    # historico (ej. DEVELOP, con datos migrados del proyecto viejo) -- sin
-    # limite, el GROUP BY sobre toda la tabla tarda varios segundos y el
-    # dashboard se siente trabado al cambiar de servidor. Por defecto se
-    # limita a 1 año; el dashboard pide el resto (completo=true) solo si el
-    # usuario arrastra el desplazador hasta el borde mas viejo ya cargado.
-    # "mes" ya es tan agregado (un punto por mes) que nunca vale la pena
-    # limitarlo.
-    limitar_por_fecha = not completo and agrupacion != "mes"
-    filtro_fecha = "AND medido_en >= now() - interval '1 year'" if limitar_por_fecha else ""
+    filtro_fecha = filtro_fecha_historico(agrupacion, completo)
 
     with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
         servidor_id = obtener_servidor_id(cur, nombre)
