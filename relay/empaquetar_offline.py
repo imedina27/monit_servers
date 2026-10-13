@@ -5,16 +5,19 @@ relay ya recolecto de sus companeros. Pensado para sitios 100% offline (ej.
 AbInBev), donde no hay otra forma de sacar los datos mas que a mano.
 
 Uso (correr en el propio hub, ej. QLYMSPROD01):
-    python3 empaquetar_offline.py <nombre_de_este_hub> <nombre_del_sitio>
+    python3 empaquetar_offline.py [nombre_de_este_hub] [nombre_del_sitio]
+
+Sin argumentos usa HUB_DEFAULT/SITIO_DEFAULT (ver mas abajo). Para otro sitio,
+pasa ambos argumentos:
 
 Ej.:
     python3 empaquetar_offline.py QLYMSPROD01 AbInBev
 
-Genera "relay_<nombre_del_sitio>.zip" en el directorio actual, con una
+Genera "relay_<nombre_del_sitio>_<ddmmaa>.zip" en el directorio actual, con una
 subcarpeta por cada nombre (este hub + cada companero que ya tenga datos en
 relay_entrante/):
 
-    relay_AbInBev.zip
+    relay_AbInBev_131026.zip
       |- QLYMSPROD01/   (lo que genero el colector local de este servidor)
       |- QLYMSPROD02/   (lo que el relay ya recolecto de este companero)
 
@@ -26,12 +29,18 @@ carpeta que ya espera ingesta/pendientes_offline/ en la maquina central
 descomprimirlo ahi (o subir cada carpeta con scripts/cargar_offline_remoto.py).
 """
 import configparser
+import datetime
 import os
 import sys
 import zipfile
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
+
+# Hub/sitio por defecto cuando se corre sin argumentos -- editar aqui si este
+# hub se reasigna a otro servidor/sitio de forma permanente.
+HUB_DEFAULT = "QLYMSPROD01"
+SITIO_DEFAULT = "AbInBev"
 
 
 def cargar_config(ruta):
@@ -64,12 +73,15 @@ def archivos_csv(directorio):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(f"Uso: python3 {sys.argv[0]} <nombre_de_este_hub> <nombre_del_sitio>", file=sys.stderr)
+    if len(sys.argv) == 1:
+        nombre_hub, nombre_sitio = HUB_DEFAULT, SITIO_DEFAULT
+    elif len(sys.argv) == 3:
+        nombre_hub, nombre_sitio = sys.argv[1], sys.argv[2]
+    else:
+        print(f"Uso: python3 {sys.argv[0]} [nombre_de_este_hub] [nombre_del_sitio]", file=sys.stderr)
         print("Ej.: python3 empaquetar_offline.py QLYMSPROD01 AbInBev", file=sys.stderr)
+        print(f"Sin argumentos usa el default: {HUB_DEFAULT} {SITIO_DEFAULT}", file=sys.stderr)
         sys.exit(1)
-
-    nombre_hub, nombre_sitio = sys.argv[1], sys.argv[2]
 
     # Cada entrada: (nombre_de_carpeta_en_el_zip, lista_de_rutas_a_archivos_.csv)
     entradas = []
@@ -93,7 +105,8 @@ def main():
         print("No hay archivos .csv que empaquetar (ni propios ni de companeros). Nada que hacer.")
         return
 
-    nombre_zip = f"relay_{nombre_sitio}.zip"
+    fecha = datetime.date.today().strftime("%d%m%y")
+    nombre_zip = f"relay_{nombre_sitio}_{fecha}.zip"
     ruta_zip = os.path.join(os.getcwd(), nombre_zip)
 
     print(f"Empaquetando en {ruta_zip}:")
