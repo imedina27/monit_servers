@@ -28,6 +28,11 @@ Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
   inventario y la documentación (no todos eran de Zacatecas).
 - Orden de `QLYMSPROD03` en el inventario de AbInBev corregido — aparecía al final del
   árbol del dashboard en vez de justo después de Zacatecas.
+- Al cambiar de servidor con internet lento, los datos del servidor anterior se quedaban
+  congelados en pantalla varios segundos sin ninguna señal de que se estuviera cargando
+  otra cosa. Ahora se atenúa el contenido y aparece "Cargando..." si la respuesta tarda
+  más de 200ms (sin parpadeo en conexiones normales); de paso, una respuesta tardía de un
+  servidor ya no se pinta si el usuario ya eligió otro mientras tanto (paso 19).
 
 ## [v2.0.0] - 2026-10-11
 

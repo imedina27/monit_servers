@@ -635,6 +635,43 @@ pantalla mientras tanto.
 
 **Paso 18 cerrado.**
 
+## 19. Overlay de carga al cambiar de servidor ✅
+
+A petición del usuario: el paso 18 resolvió la lentitud del lado del backend, pero con
+internet lento la pantalla seguía mostrando los datos del servidor anterior varios
+segundos mientras llegaban los nuevos — podía confundirse con el servidor recién
+elegido, ya que no había ninguna señal de que se estuviera cargando algo distinto.
+
+### Implementado ✅ (2026-10-16)
+
+- **Mock antes de implementar**: a petición del usuario se armó primero un prototipo
+  interactivo (Artifact) replicando el dashboard real -- mismos colores, tarjetas y
+  gráfica -- para validar el comportamiento (umbral de espera, atenuado del contenido,
+  animación) antes de tocar código. Aprobado por el usuario antes de implementar el
+  cambio real.
+- **Overlay con umbral**: `dashboard/assets/js/app.js` (`seleccionarServidor`) solo
+  atenúa el contenido y muestra "Cargando..." si las 3 peticiones que dispara el cambio
+  de servidor (actual, histórico, disco histórico) tardan más de 200ms
+  (`UMBRAL_CARGA_SERVIDOR_MS`) — evita parpadeo en conexiones normales/rápidas, donde la
+  mayoría de los cambios resuelven antes de ese umbral.
+- **Reuso de la animación existente**: el ícono giratorio del overlay reutiliza el
+  keyframe `girar` que ya usaba el botón "Actualizar" (`dashboard/assets/css/styles.css`),
+  para mantener consistencia visual en vez de inventar una animación nueva.
+- **Condición de carrera corregida de paso**: si el usuario elige otro servidor antes de
+  que la petición anterior responda, `cargarActual`/`cargarHistorico`/
+  `cargarUsoDiscoHistorico` ahora descartan la respuesta vieja (comparan contra
+  `estado.servidor` al momento de recibirla) en vez de pintarla encima del servidor ya
+  seleccionado — bug latente desde antes de este paso, expuesto (no causado) por el
+  overlay nuevo.
+- **Alcance**: solo cubre el cambio de servidor en el árbol — el refresco automático
+  cada 5 min y el botón "Actualizar" ya tenían su propia señal de progreso y no se
+  tocaron.
+- **Validado**: en navegador local con throttling manual de `fetch` (ver consola),
+  confirmando que el overlay aparece con la red lenta y no aparece con la red normal;
+  desplegado y confirmado en DEVELOP (`docker compose up -d --build backend`).
+
+**Paso 19 cerrado.**
+
 ## Pendiente de decidir
 
 - ~~Valores exactos de los umbrales de temperatura para el semáforo (paso 6, backend).~~ Resuelto el 2026-10-05 — umbral por servidor en Postgres (tabla `umbrales`), con valores investigados por modelo real de CPU/GPU (Intel ARK, AMD, NVIDIA; algunos estimados por convención de generación donde el fabricante no publica Tjmax exacto por SKU). El default genérico (70/85°C CPU, 75/85°C GPU) se queda como fallback en `backend/main.py` para servidores sin hardware identificado todavía (ej. QLYMSPROD01/02 de AbInBev, sitio offline sin acceso).
