@@ -792,3 +792,59 @@ th {
     padding: 20px 0;
     text-align: center;
 }
+
+/* ============================================================
+   Overlay de carga al cambiar de servidor
+   Se atenua el contenido que depende del servidor seleccionado
+   (viva en <main> o, en pantallas >=1800px, en #reservado -- ver
+   initColumnaReservada en app.js) y se centra un "Cargando..." en
+   el viewport. Solo se activa si la respuesta tarda mas del umbral
+   definido en app.js, para no parpadear en conexiones rapidas.
+   ============================================================ */
+#seccion-actual,
+#bloque-sensores,
+#bloque-hardware,
+#seccion-historico,
+#seccion-disco {
+    transition: opacity 0.18s ease, filter 0.18s ease;
+}
+body.cargando-servidor #seccion-actual,
+body.cargando-servidor #bloque-sensores,
+body.cargando-servidor #bloque-hardware,
+body.cargando-servidor #seccion-historico,
+body.cargando-servidor #seccion-disco {
+    opacity: 0.35;
+    filter: blur(1px);
+    pointer-events: none;
+}
+
+.overlay-servidor {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    z-index: 20;
+}
+.overlay-servidor.visible {
+    display: flex;
+    animation: aparecer-overlay 0.15s ease;
+}
+.overlay-servidor__icono {
+    font-size: 26px;
+    color: var(--texto-secundario);
+    animation: girar 1s linear infinite;
+}
+.overlay-servidor__texto {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--texto-secundario);
+    letter-spacing: 0.03em;
+}
+@keyframes aparecer-overlay {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}

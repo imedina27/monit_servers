@@ -100,13 +100,39 @@ function primerServidor(nodos) {
     return null;
 }
 
+// Overlay de "Cargando..." al cambiar de servidor (ver UMBRAL_CARGA_SERVIDOR_MS
+// mas abajo). El id de peticion evita 2 problemas si el usuario elige otro
+// servidor antes de que las peticiones del anterior hayan vuelto:
+// 1) que el overlay del cambio anterior aparezca/desaparezca tarde, pisando
+//    el estado del cambio nuevo.
+// 2) (junto con el chequeo "estado.servidor !== servidorPedido" dentro de
+//    cargarActual/cargarHistorico/cargarUsoDiscoHistorico) que una respuesta
+//    vieja se pinte encima del servidor que ya esta seleccionado ahora.
+const UMBRAL_CARGA_SERVIDOR_MS = 200;
+let idPeticionServidor = 0;
+let temporizadorCargaServidor = null;
+
+function mostrarOverlayServidor(visible) {
+    document.body.classList.toggle("cargando-servidor", visible);
+    document.getElementById("overlay-servidor")?.classList.toggle("visible", visible);
+}
+
 function seleccionarServidor(nombre) {
     estado.servidor = nombre;
     document.querySelectorAll(".arbol-servidor.seleccionado").forEach(el => el.classList.remove("seleccionado"));
     document.querySelector(`.arbol-servidor[data-nombre="${CSS.escape(nombre)}"]`)?.classList.add("seleccionado");
-    cargarActual();
-    cargarHistorico();
-    cargarUsoDiscoHistorico();
+
+    const miPeticion = ++idPeticionServidor;
+    clearTimeout(temporizadorCargaServidor);
+    temporizadorCargaServidor = setTimeout(() => {
+        if (idPeticionServidor === miPeticion) mostrarOverlayServidor(true);
+    }, UMBRAL_CARGA_SERVIDOR_MS);
+
+    Promise.allSettled([cargarActual(), cargarHistorico(), cargarUsoDiscoHistorico()]).then(() => {
+        if (idPeticionServidor !== miPeticion) return; // ya se eligio otro servidor mientras tanto
+        clearTimeout(temporizadorCargaServidor);
+        mostrarOverlayServidor(false);
+    });
 }
 
 // Pinta el arbol. Se llama tanto al cargar la pagina como al presionar
@@ -305,6 +331,7 @@ function construirUsoDisco(filas) {
 // grafica de temperatura).
 async function cargarUsoDiscoHistorico() {
     if (!estado.servidor) return;
+    const servidorPedido = estado.servidor;
     const contenedorDisco = document.getElementById("disco-contenido");
     const contenedorSlider = document.getElementById("disco-slider-contenedor");
 
@@ -317,6 +344,9 @@ async function cargarUsoDiscoHistorico() {
         const historico = await obtenerJSON(
             `${API}/servidores/${encodeURIComponent(estado.servidor)}/disco/historico?agrupacion=${estado.agrupacion}`
         );
+        // El usuario pudo haber elegido otro servidor mientras esta peticion
+        // seguia en vuelo -- descartar la respuesta vieja (ver seleccionarServidor).
+        if (estado.servidor !== servidorPedido) return;
 
         estado.discoHistorico = historico;
         estado.discoIndice = historico.length > 0 ? historico.length - 1 : 0;
@@ -334,6 +364,7 @@ async function cargarUsoDiscoHistorico() {
 
         renderDiscoSlider();
     } catch (e) {
+        if (estado.servidor !== servidorPedido) return;
         contenedorDisco.innerHTML = `<p class="mensaje-vacio">Error al cargar el uso de disco.</p>`;
         contenedorSlider.hidden = true;
         console.error(e);
@@ -398,6 +429,7 @@ async function cargarDiscoHistoricoCompleto() {
 // ─── Estado actual (tarjetas + tabla) ──────────────────────────────────────
 async function cargarActual() {
     if (!estado.servidor) return;
+    const servidorPedido = estado.servidor;
     const contenedorTarjetas = document.getElementById("tarjetas");
     const contenedorUmbrales = document.getElementById("tarjetas-umbrales");
     const divisorTarjetas = document.getElementById("tarjetas-divisor");
@@ -409,6 +441,9 @@ async function cargarActual() {
             obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/actual`),
             obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/hardware`),
         ]);
+        // El usuario pudo haber elegido otro servidor mientras esta peticion
+        // seguia en vuelo -- descartar la respuesta vieja (ver seleccionarServidor).
+        if (estado.servidor !== servidorPedido) return;
 
         contenedorHardware.innerHTML = construirFichaHardware(hardware);
 
@@ -536,6 +571,7 @@ async function cargarActual() {
             </tr>
         `).join("");
     } catch (e) {
+        if (estado.servidor !== servidorPedido) return;
         contenedorTarjetas.innerHTML = `<p class="mensaje-vacio">Error al cargar el estado actual.</p>`;
         contenedorHardware.innerHTML = "";
         console.error(e);
@@ -557,6 +593,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function cargarHistorico() {
     if (!estado.servidor) return;
+    const servidorPedido = estado.servidor;
     const svg = document.getElementById("grafica");
 
     // El backend ya devuelve "mes" completo siempre (ver VENTANA_HISTORICO_DIAS
@@ -568,6 +605,9 @@ async function cargarHistorico() {
         const filas = await obtenerJSON(
             `${API}/servidores/${encodeURIComponent(estado.servidor)}/historico?agrupacion=${estado.agrupacion}`
         );
+        // El usuario pudo haber elegido otro servidor mientras esta peticion
+        // seguia en vuelo -- descartar la respuesta vieja (ver seleccionarServidor).
+        if (estado.servidor !== servidorPedido) return;
 
         document.querySelector(".grafica-contenedor .mensaje-vacio")?.remove();
 
@@ -595,6 +635,7 @@ async function cargarHistorico() {
 
         actualizarVista();
     } catch (e) {
+        if (estado.servidor !== servidorPedido) return;
         svg.innerHTML = "";
         console.error(e);
     }

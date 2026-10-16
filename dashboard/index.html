@@ -101,6 +101,14 @@
     </aside>
 </div>
 
+<!-- Overlay de "Cargando..." al cambiar de servidor (ver seleccionarServidor
+     en app.js) -- solo aparece si la respuesta tarda, para no parpadear en
+     conexiones rapidas. -->
+<div id="overlay-servidor" class="overlay-servidor" aria-hidden="true">
+    <span class="overlay-servidor__icono">↻</span>
+    <div class="overlay-servidor__texto">Cargando...</div>
+</div>
+
 <script src="assets/js/app.js"></script>
 </body>
 </html>
