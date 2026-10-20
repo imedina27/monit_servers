@@ -257,7 +257,7 @@ def uso_disco_historico(
             f"""
             SELECT DISTINCT ON (punto_montaje, periodo)
                 date_trunc(%s, medido_en) AS periodo,
-                volumen, punto_montaje, usado_gb, total_gb
+                volumen, punto_montaje, usado_gb, total_gb, disponible_gb
             FROM uso_disco
             WHERE servidor_id = %s {filtro_fecha}
             ORDER BY punto_montaje, periodo, medido_en DESC
@@ -268,7 +268,15 @@ def uso_disco_historico(
 
     por_periodo = {}
     for fila in filas:
-        porcentaje = float(fila["usado_gb"]) / float(fila["total_gb"]) * 100 if fila["total_gb"] else 0
+        usado = float(fila["usado_gb"])
+        if fila["disponible_gb"] is not None:
+            # Igual que "df": excluye del denominador el espacio reservado
+            # para root (~5% en ext4), que si no coincidia con "usado/total".
+            disponible = float(fila["disponible_gb"])
+            porcentaje = usado / (usado + disponible) * 100 if (usado + disponible) else 0
+        else:
+            # Fila cargada antes del paso 20 (colector viejo, sin disponible_gb).
+            porcentaje = usado / float(fila["total_gb"]) * 100 if fila["total_gb"] else 0
         fila["porcentaje"] = round(porcentaje, 1)
         fila["estado"] = calcular_estado(UMBRAL_DISCO, porcentaje)
         por_periodo.setdefault(fila["periodo"], []).append(fila)

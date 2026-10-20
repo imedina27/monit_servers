@@ -1,7 +1,6 @@
 import csv
 import os
 import re
-import shutil
 import time
 import configparser
 import logging
@@ -182,6 +181,12 @@ def parsear_volumen(dispositivo):
 def leer_uso_disco():
     """
     Lee /proc/mounts y regresa el uso de cada punto de montaje real.
+
+    Usa os.statvfs() en vez de shutil.disk_usage() para poder calcular
+    "disponible_gb" igual que "df" (bloques libres para un usuario sin
+    privilegios, f_bavail) -- shutil.disk_usage() solo expone f_bfree
+    (bloques libres totales, incluyendo el ~5% reservado para root en
+    ext4), lo que hacia que nuestro % de uso no coincidiera con "df -h".
     """
     usos = []
     try:
@@ -199,15 +204,19 @@ def leer_uso_disco():
         if tipo_fs not in FILESYSTEMS_REALES:
             continue
         try:
-            total, usado, _libre = shutil.disk_usage(punto_montaje)
+            st = os.statvfs(punto_montaje)
         except OSError as e:
             logging.warning(f"No se pudo leer uso de {punto_montaje}: {e}")
             continue
+        total = st.f_frsize * st.f_blocks
+        disponible = st.f_frsize * st.f_bavail
+        usado = total - (st.f_frsize * st.f_bfree)
         usos.append({
             "volumen": parsear_volumen(dispositivo),
             "punto_montaje": punto_montaje,
             "usado_gb": round(usado / 1024 ** 3, 1),
             "total_gb": round(total / 1024 ** 3, 1),
+            "disponible_gb": round(disponible / 1024 ** 3, 1),
         })
     return usos
 
@@ -229,7 +238,7 @@ def guardar_lote_disco(directorio_salida, momento, datos_disco):
     medido_en = momento.isoformat()
 
     with open(ruta_archivo, mode="w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["medido_en", "volumen", "punto_montaje", "usado_gb", "total_gb"])
+        writer = csv.DictWriter(f, fieldnames=["medido_en", "volumen", "punto_montaje", "usado_gb", "total_gb", "disponible_gb"])
         writer.writeheader()
         for dato in datos_disco:
             writer.writerow({"medido_en": medido_en, **dato})

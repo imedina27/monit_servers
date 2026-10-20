@@ -33,6 +33,11 @@ Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
   otra cosa. Ahora se atenúa el contenido y aparece "Cargando..." si la respuesta tarda
   más de 200ms (sin parpadeo en conexiones normales); de paso, una respuesta tardía de un
   servidor ya no se pinta si el usuario ya eligió otro mientras tanto (paso 19).
+- El % de uso de disco del dashboard salía siempre más bajo que `df -h` en el mismo
+  servidor — `df` excluye del cálculo el espacio reservado para root (~5% en ext4),
+  nosotros no. Colector, ingesta y backend actualizados para calcularlo igual que `df`
+  (paso 20; requiere actualizar el colector en cada servidor y migrar la base de datos,
+  ver ROADMAP).
 
 ## [v2.0.0] - 2026-10-11
 

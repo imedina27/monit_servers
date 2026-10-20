@@ -53,6 +53,7 @@ CREATE TABLE uso_disco (
     punto_montaje VARCHAR(100) NOT NULL,  -- ej "/", "/home"
     usado_gb      NUMERIC(10,1) NOT NULL,
     total_gb      NUMERIC(10,1) NOT NULL,
+    disponible_gb NUMERIC(10,1),  -- NULL en filas cargadas antes del paso 20 (colector viejo no lo reportaba)
     UNIQUE (servidor_id, medido_en, punto_montaje)
 );
 

@@ -672,6 +672,48 @@ elegido, ya que no había ninguna señal de que se estuviera cargando algo disti
 
 **Paso 19 cerrado.**
 
+## 20. Porcentaje de disco no coincidía con `df -h`
+
+A petición del usuario, al comparar el dashboard contra `df -h` en un servidor real
+(QLYMSPROD01) se notó que el % de uso de disco siempre salía más bajo en el dashboard
+que en `df -h`, de forma consistente en todos los puntos de montaje.
+
+### Causa raíz
+
+`df` calcula `Usado / (Usado + Disponible)`, donde "Disponible" (`f_bavail`) **excluye**
+el espacio reservado para root (~5% por defecto en ext4, vía `tune2fs -m`). El colector
+usaba `shutil.disk_usage()`, que solo expone `total`/`usado` del tamaño físico completo
+(incluyendo esa reserva) — el backend calculaba `usado/total`, un porcentaje distinto
+("qué tanto del disco físico está ocupado") al que reporta `df` ("qué tan lleno estoy
+como usuario sin privilegios").
+
+### Implementado
+
+- **Colector** (`colector_ubuntu/monitor.py`, `leer_uso_disco`): cambia de
+  `shutil.disk_usage()` a `os.statvfs()` para poder leer `f_bavail` y calcular
+  `disponible_gb`, agregado como columna nueva en el CSV (`disco_*.csv`).
+- **Ingesta** (`ingesta/ingesta.py`): `parsear_lote_disco` lee `disponible_gb` de forma
+  tolerante (`fila.get(...)`, no `fila[...]`) — los colectores ya instalados se
+  actualizan uno por uno a mano (no hay mecanismo central de despliegue), así que
+  conviven por un tiempo CSVs viejos (5 columnas) y nuevos (6 columnas) sin romper la
+  carga.
+- **Base de datos** (`db/schema.sql`): columna nueva `disponible_gb` (nullable) en
+  `uso_disco` — `NULL` en todo lo cargado antes de este paso, donde no tenemos ese dato.
+- **Backend** (`backend/main.py`, `/disco/historico`): el % ahora es
+  `usado/(usado+disponible)*100` (igual que `df`) cuando `disponible_gb` no es `NULL`;
+  conserva el cálculo viejo (`usado/total`) como fallback para filas históricas sin ese
+  dato, para no distorsionar el histórico ya cargado.
+
+### Pendiente (requiere acceso manual a cada servidor, fuera del alcance de Claude en este
+entorno — sin acceso SSH a producción ni a servidores de clientes)
+
+- Aplicar `ALTER TABLE uso_disco ADD COLUMN disponible_gb NUMERIC(10,1);` en Postgres de
+  DEVELOP antes de desplegar el backend nuevo (orden crítico).
+- Desplegar backend/ingesta actualizados en DEVELOP (`docker compose up -d --build backend`).
+- Copiar el `monitor.py` nuevo y reiniciar `monit_servers_v2.service` en cada servidor con
+  colector instalado (DEVELOP, MINI_LENOVO, gateways de AbInBev/API Manzanillo/C5i y sus
+  compañeros vía relay) — se espera hacer de forma gradual, no simultánea.
+
 ## Pendiente de decidir
 
 - ~~Valores exactos de los umbrales de temperatura para el semáforo (paso 6, backend).~~ Resuelto el 2026-10-05 — umbral por servidor en Postgres (tabla `umbrales`), con valores investigados por modelo real de CPU/GPU (Intel ARK, AMD, NVIDIA; algunos estimados por convención de generación donde el fabricante no publica Tjmax exacto por SKU). El default genérico (70/85°C CPU, 75/85°C GPU) se queda como fallback en `backend/main.py` para servidores sin hardware identificado todavía (ej. QLYMSPROD01/02 de AbInBev, sitio offline sin acceso).

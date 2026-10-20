@@ -165,9 +165,20 @@ def parsear_lote(contenido):
 
 # ─── Parseo de uso de disco (archivos "disco_*.csv" del colector) ─────────────
 def parsear_lote_disco(contenido):
+    """
+    "disponible_gb" se lee con .get() en vez de fila[...] porque los
+    colectores no se actualizan todos a la vez (son maquinas separadas,
+    cada una se actualiza a mano) -- mientras conviven colectores viejos
+    (CSV de 5 columnas) y nuevos (6 columnas), esto evita que un CSV viejo
+    rompa la ingesta.
+    """
     lector = csv.DictReader(contenido.splitlines())
     return [
-        (fila["medido_en"], fila["volumen"], fila["punto_montaje"], float(fila["usado_gb"]), float(fila["total_gb"]))
+        (
+            fila["medido_en"], fila["volumen"], fila["punto_montaje"],
+            float(fila["usado_gb"]), float(fila["total_gb"]),
+            float(fila["disponible_gb"]) if fila.get("disponible_gb") else None,
+        )
         for fila in lector
     ]
 
@@ -178,7 +189,7 @@ def insertar_lote_disco(conn, servidor_id, nombre_archivo, origen, filas):
         execute_values(
             cur,
             """
-            INSERT INTO uso_disco (servidor_id, medido_en, volumen, punto_montaje, usado_gb, total_gb)
+            INSERT INTO uso_disco (servidor_id, medido_en, volumen, punto_montaje, usado_gb, total_gb, disponible_gb)
             VALUES %s
             ON CONFLICT (servidor_id, medido_en, punto_montaje) DO NOTHING
             """,
