@@ -26,7 +26,8 @@ UMBRALES_DEFAULT = {
 
 # Umbral de ocupacion de disco (%) -- igual para todos los servidores, no
 # hay override por servidor como en CPU/GPU (no se ha pedido esa necesidad).
-UMBRAL_DISCO = {"verde_max": 70, "ambar_max": 90}
+# Homologado con los umbrales que ya usa AbInBev para sus propias alertas.
+UMBRAL_DISCO = {"verde_max": 75, "ambar_max": 85}
 
 # Ventana por defecto (dias) para /historico y /disco/historico, por
 # agrupacion -- evita escanear/agregar TODO el historico en cada carga

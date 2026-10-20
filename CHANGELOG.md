@@ -10,6 +10,11 @@ Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
 - Tarjetas "Umbral CPU"/"Umbral GPU" en el dashboard (verde/ámbar/rojo configurados por
   servidor en Postgres), junto a las tarjetas de temperatura (paso 17).
 
+### Changed
+
+- Umbral de uso de disco (verde/ámbar/rojo, global para todos los servidores) ajustado de
+  70/90 a 75/85, para homologarlo con el umbral que ya usa AbInBev en sus propias alertas.
+
 ### Fixed
 
 - `/api/servidores/{nombre}/historico` y `/disco/historico` ya no agregaban TODO el
