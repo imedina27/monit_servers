@@ -672,7 +672,7 @@ elegido, ya que no había ninguna señal de que se estuviera cargando algo disti
 
 **Paso 19 cerrado.**
 
-## 20. Porcentaje de disco no coincidía con `df -h`
+## 20. Porcentaje de disco no coincidía con `df -h` ✅
 
 A petición del usuario, al comparar el dashboard contra `df -h` en un servidor real
 (QLYMSPROD01) se notó que el % de uso de disco siempre salía más bajo en el dashboard
@@ -687,7 +687,7 @@ usaba `shutil.disk_usage()`, que solo expone `total`/`usado` del tamaño físico
 ("qué tanto del disco físico está ocupado") al que reporta `df` ("qué tan lleno estoy
 como usuario sin privilegios").
 
-### Implementado
+### Implementado ✅ (2026-10-20)
 
 - **Colector** (`colector_ubuntu/monitor.py`, `leer_uso_disco`): cambia de
   `shutil.disk_usage()` a `os.statvfs()` para poder leer `f_bavail` y calcular
@@ -703,16 +703,32 @@ como usuario sin privilegios").
   `usado/(usado+disponible)*100` (igual que `df`) cuando `disponible_gb` no es `NULL`;
   conserva el cálculo viejo (`usado/total`) como fallback para filas históricas sin ese
   dato, para no distorsionar el histórico ya cargado.
+- **Umbral homologado con AbInBev**: de paso, se ajustó `UMBRAL_DISCO` (verde/ámbar) de
+  70/90 a 75/85, para igualar el umbral que AbInBev ya usa en sus propias alertas.
+- **Desplegado**: migración (`ALTER TABLE uso_disco ADD COLUMN disponible_gb`) aplicada en
+  Postgres de DEVELOP, backend reconstruido (`docker compose up -d --build backend`), y
+  colector actualizado (copiar `monitor.py` + `systemctl restart`) en DEVELOP y los 9
+  servidores de AbInBev (`QLYMSPROD01-06`, `09-11`) visitados en sitio. Validado
+  comparando el % del dashboard contra `df -h` y consultando la API directamente — ya
+  coincide (antes 13.8%, ahora 14.5%, igual que `df -h` salvo redondeo). Pendiente
+  actualizar el colector en MINI_LENOVO y los gateways de API/Manzanillo y C5i/Colima
+  (y sus compañeros vía relay) — no es urgente, el parseo tolerante permite hacerlo
+  gradual sin romper nada mientras tanto.
+- **Gotcha de despliegue a tener en cuenta a futuro**: `docker compose up -d --build`
+  usa el código que esté en el working copy del repo en ese momento, no lo último de
+  GitHub — si se corre antes de `git pull`, la imagen queda horneada con código viejo
+  sin ningún error que lo señale. Pasó en este despliegue: el primer `--build backend`
+  se hizo antes del `git pull`, dejando el backend con el cálculo viejo un rato sin que
+  nadie lo notara hasta compararlo con `df -h` otra vez. Siempre `git pull` antes de
+  `--build`, nunca al revés.
+- **Filas de AbInBev con `disponible_gb` en `NULL`** a pesar de que el CSV sí traía el
+  dato: el lote subido durante el despliegue se ingirió mientras el backend aún corría
+  el `INSERT` viejo (sin esa columna). Son filas puntuales (una sola hora, el día del
+  despliegue) — se decidió no corregirlas a mano (implicaría borrar/reinsertar datos de
+  producción por una sola lectura); se autocorrige solo con la siguiente carga real de
+  cada sitio.
 
-### Pendiente (requiere acceso manual a cada servidor, fuera del alcance de Claude en este
-entorno — sin acceso SSH a producción ni a servidores de clientes)
-
-- Aplicar `ALTER TABLE uso_disco ADD COLUMN disponible_gb NUMERIC(10,1);` en Postgres de
-  DEVELOP antes de desplegar el backend nuevo (orden crítico).
-- Desplegar backend/ingesta actualizados en DEVELOP (`docker compose up -d --build backend`).
-- Copiar el `monitor.py` nuevo y reiniciar `monit_servers_v2.service` en cada servidor con
-  colector instalado (DEVELOP, MINI_LENOVO, gateways de AbInBev/API Manzanillo/C5i y sus
-  compañeros vía relay) — se espera hacer de forma gradual, no simultánea.
+**Paso 20 cerrado.**
 
 ## Pendiente de decidir
 
