@@ -730,6 +730,19 @@ como usuario sin privilegios").
 
 **Paso 20 cerrado.**
 
+## 21. Ajuste fino del umbral de disco (70/80) ✅
+
+Tras desplegar el paso 20 con el umbral homologado a 75/85, se ajustó a **70/80**
+(`backend/main.py`, `UMBRAL_DISCO`) — mismo criterio de homologación con AbInBev,
+valor final confirmado.
+
+### Implementado ✅ (2026-10-21)
+
+- Cambio de una sola constante, sin migración de base de datos ni cambios en el
+  colector/ingesta (a diferencia del paso 20) — solo requiere reconstruir el backend.
+
+**Paso 21 cerrado.**
+
 ## Pendiente de decidir
 
 - ~~Valores exactos de los umbrales de temperatura para el semáforo (paso 6, backend).~~ Resuelto el 2026-10-05 — umbral por servidor en Postgres (tabla `umbrales`), con valores investigados por modelo real de CPU/GPU (Intel ARK, AMD, NVIDIA; algunos estimados por convención de generación donde el fabricante no publica Tjmax exacto por SKU). El default genérico (70/85°C CPU, 75/85°C GPU) se queda como fallback en `backend/main.py` para servidores sin hardware identificado todavía (ej. QLYMSPROD01/02 de AbInBev, sitio offline sin acceso).
