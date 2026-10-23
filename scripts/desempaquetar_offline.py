@@ -19,7 +19,7 @@ import urllib.error
 import zipfile
 from pathlib import Path
 
-from cargar_offline_remoto import subir_bundle, disparar_ingesta
+from cargar_offline_remoto import DevelopNoDisponible, subir_bundle, disparar_ingesta
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 ZIPS_DIR = PROJECT_DIR / "relay" / "zips"
@@ -66,10 +66,19 @@ def main():
     algo_subido = False
     for ruta_zip in zips:
         print(f"\nProcesando {ruta_zip.name}...")
-        if procesar_zip(ruta_zip):
-            ruta_zip.unlink()
-            print(f"  Borrado: {ruta_zip.name}")
-            algo_subido = True
+        try:
+            if procesar_zip(ruta_zip):
+                ruta_zip.unlink()
+                print(f"  Borrado: {ruta_zip.name}")
+                algo_subido = True
+        except DevelopNoDisponible as e:
+            print(f"  ERROR: {e}", file=sys.stderr)
+            print(
+                "  DEVELOP no esta disponible -- se deja este y el resto de los .zip "
+                "pendientes para reintentar mas tarde.",
+                file=sys.stderr,
+            )
+            break
 
     if not algo_subido:
         print("\nNingun zip se subio correctamente, no se dispara la ingesta.")

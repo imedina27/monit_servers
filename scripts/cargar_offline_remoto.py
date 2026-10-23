@@ -27,16 +27,25 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_DIR / ".env")
 
 
+class DevelopNoDisponible(Exception):
+    """DEVELOP no se pudo conectar por SSH (red caida, host apagado, timeout,
+    credenciales invalidas, etc.) -- distinto de un error de un bundle/zip en
+    particular, afecta a cualquier intento de subida mientras persista."""
+
+
 def subir_bundle(carpeta_local, nombre_servidor):
     cliente = paramiko.SSHClient()
     cliente.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    cliente.connect(
-        hostname=os.environ["DEVELOP_HOST"],
-        port=int(os.environ.get("DEVELOP_SSH_PORT", "22")),
-        username=os.environ["DEVELOP_SSH_USER"],
-        password=os.environ["DEVELOP_SSH_PASSWORD"],
-        timeout=15,
-    )
+    try:
+        cliente.connect(
+            hostname=os.environ["DEVELOP_HOST"],
+            port=int(os.environ.get("DEVELOP_SSH_PORT", "22")),
+            username=os.environ["DEVELOP_SSH_USER"],
+            password=os.environ["DEVELOP_SSH_PASSWORD"],
+            timeout=15,
+        )
+    except (OSError, paramiko.SSHException) as e:
+        raise DevelopNoDisponible(f"no se pudo conectar a DEVELOP por SSH: {e}") from e
     sftp = cliente.open_sftp()
 
     remoto_servidor = f"{os.environ['DEVELOP_REMOTE_PATH']}/{nombre_servidor}"
@@ -73,7 +82,12 @@ def main():
         sys.exit(1)
 
     print(f"Subiendo bundle de '{nombre_servidor}' desde {carpeta_local} a DEVELOP...")
-    n_subidos = subir_bundle(carpeta_local, nombre_servidor)
+    try:
+        n_subidos = subir_bundle(carpeta_local, nombre_servidor)
+    except DevelopNoDisponible as e:
+        print(f"Error: {e}", file=sys.stderr)
+        print("Nada se subio -- intenta de nuevo cuando DEVELOP este disponible.", file=sys.stderr)
+        sys.exit(1)
     if n_subidos == 0:
         print("No se encontraron archivos .csv en esa carpeta, nada que subir.")
         return
