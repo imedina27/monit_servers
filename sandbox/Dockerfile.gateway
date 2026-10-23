@@ -1,0 +1,31 @@
+# Simula el gateway de un sitio relay: todo lo de Dockerfile.servidor, mas
+# Python + lo minimo del repo (comun/ + relay/leer_companero.py) para poder
+# correr 'python3 /opt/monit_servers_v2/relay/leer_companero.py <nombre>'
+# exactamente como lo invocaria el backend real (ver
+# backend/ssh_lectura_directa.py, caso "companero").
+#
+# Build context: la RAIZ del repo (no sandbox/), por las rutas de COPY de abajo.
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openssh-server python3 python3-pip && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /var/run/sshd && \
+    useradd -m -s /bin/bash monitor && \
+    echo "monitor:monitor" | chpasswd && \
+    mkdir -p /home/monitor/datos /home/monitor/relay_entrante && \
+    chown -R monitor:monitor /home/monitor
+
+RUN pip3 install --no-cache-dir --break-system-packages paramiko pyyaml
+
+COPY sandbox/sensors /usr/local/bin/sensors
+COPY sandbox/nvidia-smi /usr/local/bin/nvidia-smi
+RUN chmod +x /usr/local/bin/sensors /usr/local/bin/nvidia-smi
+
+RUN mkdir -p /opt/monit_servers_v2/relay
+COPY comun /opt/monit_servers_v2/comun
+COPY relay/leer_companero.py /opt/monit_servers_v2/relay/leer_companero.py
+COPY sandbox/companeros.sandbox.yaml /opt/monit_servers_v2/relay/companeros.yaml
+
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D"]

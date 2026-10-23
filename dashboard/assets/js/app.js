@@ -26,7 +26,14 @@ const estado = {
     discoHistorico: null,  // [{periodo, montajes}], ya ordenado por fecha -- el slider solo indexa esto
     discoIndice: 0,        // posicion actual del slider dentro de discoHistorico
     discoCompleto: false,  // false = solo se cargo la ventana por defecto (ver cargarUsoDiscoHistorico/cargarDiscoHistoricoCompleto)
+    hardwareActual: null,  // cacheado por cargarActual(), reusado por el tick de "Tiempo Real" (no cambia entre lecturas)
+    tiempoRealActivo: false,
+    tiempoRealIntervaloId: null,
+    tiempoRealPuntos: new Map(), // sensor -> [{periodo, valor}], acotado a MAX_PUNTOS_TIEMPO_REAL
 };
+
+const MAX_PUNTOS_TIEMPO_REAL = 100;
+const INTERVALO_MINIMO_TIEMPO_REAL_SEG = 3;
 
 // ─── Tema (claro/oscuro) ───────────────────────────────────────────────────
 function aplicarTema(tema) {
@@ -65,6 +72,7 @@ function cssVar(nombre) {
 
 function formatearFecha(iso, agrupacion) {
     const d = new Date(iso);
+    if (agrupacion === "segundo") return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     if (agrupacion === "hora") return d.toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
     if (agrupacion === "dia") return d.toLocaleString("es-MX", { day: "2-digit", month: "short" });
     return d.toLocaleString("es-MX", { month: "short", year: "numeric" });
@@ -118,6 +126,7 @@ function mostrarOverlayServidor(visible) {
 }
 
 function seleccionarServidor(nombre) {
+    if (estado.tiempoRealActivo) desactivarTiempoReal();
     estado.servidor = nombre;
     document.querySelectorAll(".arbol-servidor.seleccionado").forEach(el => el.classList.remove("seleccionado"));
     document.querySelector(`.arbol-servidor[data-nombre="${CSS.escape(nombre)}"]`)?.classList.add("seleccionado");
@@ -128,7 +137,7 @@ function seleccionarServidor(nombre) {
         if (idPeticionServidor === miPeticion) mostrarOverlayServidor(true);
     }, UMBRAL_CARGA_SERVIDOR_MS);
 
-    Promise.allSettled([cargarActual(), cargarHistorico(), cargarUsoDiscoHistorico()]).then(() => {
+    Promise.allSettled([cargarActual(), cargarHistorico(), cargarUsoDiscoHistorico(), verificarDisponibilidadTiempoReal()]).then(() => {
         if (idPeticionServidor !== miPeticion) return; // ya se eligio otro servidor mientras tanto
         clearTimeout(temporizadorCargaServidor);
         mostrarOverlayServidor(false);
@@ -427,6 +436,85 @@ async function cargarDiscoHistoricoCompleto() {
 }
 
 // ─── Estado actual (tarjetas + tabla) ──────────────────────────────────────
+// Arma y pinta las tarjetas de VALOR (temperatura actual de CPU/GPU) en
+// #tarjetas. Reusada por cargarActual() (lecturas de BD) y por el tick de
+// "Tiempo Real" (lecturas SSH en vivo) -- ambas reciben el mismo shape de
+// 'lecturas' ({componente, sensor, temperatura_c, medido_en, estado}).
+// Devuelve {cpu, gpus} ya filtrados/ordenados, para que el llamador arme las
+// tarjetas de umbral sin repetir ese filtrado.
+function pintarTarjetasValor(lecturas, hardware) {
+    const contenedorTarjetas = document.getElementById("tarjetas");
+
+    // Si el componente dejo de reportar (ej. GPU con driver caido), su ultima
+    // lectura puede ser de hace dias/semanas. Mostrarla como si fuera el valor
+    // actual es enganoso, asi que a partir de este umbral se muestra "--".
+    // 24h (no 3h) porque sitios 100% offline como AbInBev solo se descargan
+    // ~1 vez al dia (visita manual a sitio, ver paso 14/ROADMAP) -- con 3h
+    // se mostraba "--" todos los dias aunque el dato fuera normal. Es un
+    // umbral global (igual para los servidores que reportan cada hora), no
+    // por servidor -- decision explicita del usuario el 2026-10-12 pese a
+    // que eso retrasa hasta 24h detectar una falla real (ej. driver de GPU
+    // caido) en los servidores que si reportan seguido.
+    const UMBRAL_OBSOLETO_MS = 24 * 60 * 60 * 1000;
+    const esObsoleta = (medidoEn) => (Date.now() - new Date(medidoEn).getTime()) > UMBRAL_OBSOLETO_MS;
+
+    // Tarjeta de CPU: se muestra el core mas caliente (peor caso), no el promedio.
+    const cpu = lecturas.filter(l => l.componente === "cpu");
+    const gpus = lecturas.filter(l => l.componente === "gpu").sort((a, b) => a.sensor.localeCompare(b.sensor));
+
+    // Subtitulo: modelo de hardware + nucleos si el servidor los tiene cargados
+    // en Postgres, si no cae de vuelta al nombre crudo del sensor (comportamiento de siempre).
+    const subtituloCpu = hardware?.cpu_modelo
+        ? `${hardware.cpu_modelo}${hardware.cpu_nucleos ? ` (${hardware.cpu_nucleos} cores)` : ""}`
+        : null;
+    const subtituloGpu = hardware?.gpu_modelo
+        ? `${hardware.gpu_modelo}${hardware.gpu_nucleos ? ` (${hardware.gpu_nucleos} cores)` : ""}`
+        : null;
+
+    // Mismo orden/paleta que la grafica (construirSeries): CPU siempre
+    // --serie-1, GPUs en orden alfabetico sobre --serie-2/--serie-3/--serie-1,
+    // asi la franja de color de la tarjeta coincide con la linea de la grafica.
+    const coloresGpu = ["--serie-2", "--serie-3", "--serie-1"];
+
+    const tarjetas = [];
+    if (cpu.length > 0) {
+        // Un sensor fantasma (ej. de una prueba manual del colector, hace
+        // semanas) puede quedar con la temperatura mas alta de todas sin
+        // haber vuelto a reportar nunca -- si se descartaran los obsoletos
+        // DESPUES de elegir "el peor caso", ese sensor viejo secuestraria la
+        // tarjeta entera (la marcaria obsoleta aunque el resto de los cores
+        // sean recientes). Por eso primero se descartan los obsoletos, y
+        // solo si TODOS los sensores de CPU estan obsoletos se usa el
+        // conjunto completo (para seguir mostrando "--" en ese caso real).
+        const cpuVigente = cpu.filter(l => !esObsoleta(l.medido_en));
+        const candidatosCpu = cpuVigente.length > 0 ? cpuVigente : cpu;
+        const peor = candidatosCpu.reduce((max, l) => (l.temperatura_c > max.temperatura_c ? l : max), candidatosCpu[0]);
+        tarjetas.push({ titulo: "CPU (máx.)", ...peor, sensor: subtituloCpu || peor.sensor, color: cssVar("--serie-1") });
+    }
+    gpus.forEach((g, i) => {
+        tarjetas.push({ titulo: g.sensor.replace("_", " "), ...g, sensor: subtituloGpu || g.sensor, color: cssVar(coloresGpu[i % coloresGpu.length]) });
+    });
+
+    contenedorTarjetas.innerHTML = tarjetas.map(t => {
+        const obsoleta = esObsoleta(t.medido_en);
+        const atributoTitulo = obsoleta
+            ? ` title="Sin lecturas recientes · última: ${new Date(t.medido_en).toLocaleString("es-MX")}"`
+            : "";
+        return `
+        <div class="tarjeta">
+            <div class="tarjeta__titulo">${t.titulo}</div>
+            <div class="tarjeta__valor"${atributoTitulo}>
+                <span class="punto-estado" data-estado="${obsoleta ? '' : (t.estado || '')}"></span>${obsoleta ? "--" : t.temperatura_c}<span class="tarjeta__unidad">°C</span>
+            </div>
+            <div class="tarjeta__sensor">${t.sensor}</div>
+            <div class="tarjeta__franja" style="background-color:${t.color}"></div>
+        </div>
+    `;
+    }).join("");
+
+    return { cpu, gpus };
+}
+
 async function cargarActual() {
     if (!estado.servidor) return;
     const servidorPedido = estado.servidor;
@@ -446,6 +534,7 @@ async function cargarActual() {
         if (estado.servidor !== servidorPedido) return;
 
         contenedorHardware.innerHTML = construirFichaHardware(hardware);
+        estado.hardwareActual = hardware;
 
         const fechaLecturas = document.getElementById("fecha-lecturas");
 
@@ -464,72 +553,7 @@ async function cargarActual() {
         }, new Date(lecturas[0].medido_en));
         fechaLecturas.textContent = `(${masReciente.toLocaleDateString("es-MX")})`;
 
-        // Si el componente dejo de reportar (ej. GPU con driver caido), su ultima
-        // lectura puede ser de hace dias/semanas. Mostrarla como si fuera el valor
-        // actual es enganoso, asi que a partir de este umbral se muestra "--".
-        // 24h (no 3h) porque sitios 100% offline como AbInBev solo se descargan
-        // ~1 vez al dia (visita manual a sitio, ver paso 14/ROADMAP) -- con 3h
-        // se mostraba "--" todos los dias aunque el dato fuera normal. Es un
-        // umbral global (igual para los servidores que reportan cada hora), no
-        // por servidor -- decision explicita del usuario el 2026-10-12 pese a
-        // que eso retrasa hasta 24h detectar una falla real (ej. driver de GPU
-        // caido) en los servidores que si reportan seguido.
-        const UMBRAL_OBSOLETO_MS = 24 * 60 * 60 * 1000;
-        const esObsoleta = (medidoEn) => (Date.now() - new Date(medidoEn).getTime()) > UMBRAL_OBSOLETO_MS;
-
-        // Tarjeta de CPU: se muestra el core mas caliente (peor caso), no el promedio.
-        const cpu = lecturas.filter(l => l.componente === "cpu");
-        const gpus = lecturas.filter(l => l.componente === "gpu").sort((a, b) => a.sensor.localeCompare(b.sensor));
-
-        // Subtitulo: modelo de hardware + nucleos si el servidor los tiene cargados
-        // en Postgres, si no cae de vuelta al nombre crudo del sensor (comportamiento de siempre).
-        const subtituloCpu = hardware.cpu_modelo
-            ? `${hardware.cpu_modelo}${hardware.cpu_nucleos ? ` (${hardware.cpu_nucleos} cores)` : ""}`
-            : null;
-        const subtituloGpu = hardware.gpu_modelo
-            ? `${hardware.gpu_modelo}${hardware.gpu_nucleos ? ` (${hardware.gpu_nucleos} cores)` : ""}`
-            : null;
-
-        // Mismo orden/paleta que la grafica (construirSeries): CPU siempre
-        // --serie-1, GPUs en orden alfabetico sobre --serie-2/--serie-3/--serie-1,
-        // asi la franja de color de la tarjeta coincide con la linea de la grafica.
-        const coloresGpu = ["--serie-2", "--serie-3", "--serie-1"];
-
-        const tarjetas = [];
-        if (cpu.length > 0) {
-            // Un sensor fantasma (ej. de una prueba manual del colector, hace
-            // semanas) puede quedar con la temperatura mas alta de todas sin
-            // haber vuelto a reportar nunca -- si se descartaran los obsoletos
-            // DESPUES de elegir "el peor caso", ese sensor viejo secuestraria la
-            // tarjeta entera (la marcaria obsoleta aunque el resto de los cores
-            // sean recientes). Por eso primero se descartan los obsoletos, y
-            // solo si TODOS los sensores de CPU estan obsoletos se usa el
-            // conjunto completo (para seguir mostrando "--" en ese caso real).
-            const cpuVigente = cpu.filter(l => !esObsoleta(l.medido_en));
-            const candidatosCpu = cpuVigente.length > 0 ? cpuVigente : cpu;
-            const peor = candidatosCpu.reduce((max, l) => (l.temperatura_c > max.temperatura_c ? l : max), candidatosCpu[0]);
-            tarjetas.push({ titulo: "CPU (máx.)", ...peor, sensor: subtituloCpu || peor.sensor, color: cssVar("--serie-1") });
-        }
-        gpus.forEach((g, i) => {
-            tarjetas.push({ titulo: g.sensor.replace("_", " "), ...g, sensor: subtituloGpu || g.sensor, color: cssVar(coloresGpu[i % coloresGpu.length]) });
-        });
-
-        contenedorTarjetas.innerHTML = tarjetas.map(t => {
-            const obsoleta = esObsoleta(t.medido_en);
-            const atributoTitulo = obsoleta
-                ? ` title="Sin lecturas recientes · última: ${new Date(t.medido_en).toLocaleString("es-MX")}"`
-                : "";
-            return `
-            <div class="tarjeta">
-                <div class="tarjeta__titulo">${t.titulo}</div>
-                <div class="tarjeta__valor"${atributoTitulo}>
-                    <span class="punto-estado" data-estado="${obsoleta ? '' : (t.estado || '')}"></span>${obsoleta ? "--" : t.temperatura_c}<span class="tarjeta__unidad">°C</span>
-                </div>
-                <div class="tarjeta__sensor">${t.sensor}</div>
-                <div class="tarjeta__franja" style="background-color:${t.color}"></div>
-            </div>
-        `;
-        }).join("");
+        const { cpu, gpus } = pintarTarjetasValor(lecturas, hardware);
 
         // Tarjetas de umbral (verde/ambar/rojo configurados para este servidor en
         // Postgres, via hardware.umbrales -- una por componente que tenga tarjeta
@@ -1023,6 +1047,177 @@ function initBotonActualizar() {
     });
 }
 
+// ─── Boton "Tiempo Real" (polling SSH en vivo, ver backend/ssh_lectura_directa.py) ──
+// Mientras este activo, NO se toca BD: se abre una sesion SSH puntual al
+// servidor (o a su gateway, si es companero de un relay) y se lee
+// sensors/nvidia-smi directo cada X segundos. La grafica historica se
+// reemplaza por los puntos en vivo (estado.tiempoRealPuntos); las tarjetas
+// de umbral/hardware/tabla de sensores NO se tocan -- son configuracion
+// estatica, no una lectura.
+async function verificarDisponibilidadTiempoReal() {
+    const boton = document.getElementById("boton-tiempo-real");
+    if (!estado.servidor) return;
+    const servidorPedido = estado.servidor;
+
+    try {
+        const resp = await obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/tiempo_real/disponible`);
+        if (estado.servidor !== servidorPedido) return;
+        boton.disabled = !resp.disponible;
+        boton.classList.toggle("boton-actualizar--deshabilitado-tiempo-real", !resp.disponible);
+        boton.title = resp.disponible
+            ? "Leer CPU/GPU en vivo por SSH, cada X segundos"
+            : (resp.motivo || "Tiempo real no disponible para este servidor.");
+    } catch (e) {
+        if (estado.servidor !== servidorPedido) return;
+        boton.disabled = true;
+        console.error(e);
+    }
+}
+
+function limpiarGraficaParaTiempoReal() {
+    estado.tiempoRealPuntos = new Map();
+    document.querySelector(".grafica-contenedor .mensaje-vacio")?.remove();
+    document.getElementById("desplazador").style.display = "none";
+    document.getElementById("rango-actual").textContent = "En vivo";
+    document.getElementById("grafica").innerHTML = "";
+    document.getElementById("leyenda").innerHTML = "";
+}
+
+function restaurarGraficaNormal() {
+    document.getElementById("desplazador").style.display = "";
+    if (estado.seriesCompletas) {
+        actualizarVista();
+    } else {
+        document.getElementById("rango-actual").textContent = "";
+    }
+}
+
+// Acumula cada lectura en estado.tiempoRealPuntos (una serie por sensor,
+// acotada a MAX_PUNTOS_TIEMPO_REAL) y redibuja grafica + leyenda + tarjetas.
+// Mismo shape de 'lecturas' que /actual, asi reusa pintarTarjetasValor tal cual.
+function procesarLecturaTiempoReal(lecturas) {
+    const coloresGpu = ["--serie-2", "--serie-3", "--serie-1"];
+    const gpusOrdenadas = lecturas.filter(l => l.componente === "gpu").sort((a, b) => a.sensor.localeCompare(b.sensor));
+    const cpuLecturas = lecturas.filter(l => l.componente === "cpu");
+
+    const colorPorSensor = new Map();
+    colorPorSensor.set("__cpu__", cssVar("--serie-1"));
+    gpusOrdenadas.forEach((g, i) => colorPorSensor.set(g.sensor, cssVar(coloresGpu[i % coloresGpu.length])));
+
+    const agregarPunto = (clave, periodo, valor) => {
+        if (!estado.tiempoRealPuntos.has(clave)) estado.tiempoRealPuntos.set(clave, []);
+        const puntos = estado.tiempoRealPuntos.get(clave);
+        puntos.push({ periodo, valor });
+        if (puntos.length > MAX_PUNTOS_TIEMPO_REAL) puntos.shift();
+    };
+
+    // CPU: promedio de todos los sensores de esta lectura, una sola linea
+    // (mismo criterio que construirSeries para el historico).
+    if (cpuLecturas.length > 0) {
+        const prom = cpuLecturas.reduce((a, l) => a + l.temperatura_c, 0) / cpuLecturas.length;
+        agregarPunto("__cpu__", cpuLecturas[0].medido_en, Math.round(prom * 10) / 10);
+    }
+    // GPU: una linea por sensor, tal cual la entrega el backend.
+    gpusOrdenadas.forEach(g => agregarPunto(g.sensor, g.medido_en, g.temperatura_c));
+
+    const series = [...estado.tiempoRealPuntos.entries()].map(([clave, puntos]) => ({
+        nombre: clave === "__cpu__" ? "CPU (promedio)" : clave.replace("_", " "),
+        color: colorPorSensor.get(clave) || cssVar("--serie-1"),
+        puntos,
+    }));
+
+    if (series.length > 0) {
+        renderGrafica(document.getElementById("grafica"), series, "segundo");
+        renderLeyenda(document.getElementById("leyenda"), series);
+    }
+    pintarTarjetasValor(lecturas, estado.hardwareActual);
+}
+
+function mostrarAvisoTiempoReal(mensaje) {
+    const contenedorTarjetas = document.getElementById("tarjetas");
+    let aviso = document.getElementById("aviso-tiempo-real");
+    if (!aviso) {
+        aviso = document.createElement("p");
+        aviso.id = "aviso-tiempo-real";
+        aviso.className = "mensaje-vacio";
+        contenedorTarjetas.parentElement.insertBefore(aviso, contenedorTarjetas.nextSibling);
+    }
+    aviso.textContent = mensaje;
+}
+
+function ocultarAvisoTiempoReal() {
+    document.getElementById("aviso-tiempo-real")?.remove();
+}
+
+async function tickTiempoReal() {
+    if (!estado.tiempoRealActivo || !estado.servidor) return;
+    const servidorPedido = estado.servidor;
+    try {
+        const lecturas = await obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/tiempo_real/lectura`);
+        if (estado.servidor !== servidorPedido || !estado.tiempoRealActivo) return;
+        ocultarAvisoTiempoReal();
+        procesarLecturaTiempoReal(lecturas);
+    } catch (e) {
+        if (estado.servidor !== servidorPedido || !estado.tiempoRealActivo) return;
+        // No se apaga solo ni se detiene el loop -- mismo criterio que el
+        // manejo de DEVELOP no disponible en scripts/desempaquetar_offline.py:
+        // se avisa claro y se sigue reintentando en el siguiente tick.
+        mostrarAvisoTiempoReal("Tiempo real: el servidor no respondio en esta lectura, reintentando...");
+        console.error(e);
+    }
+}
+
+function activarTiempoReal() {
+    const inputIntervalo = document.getElementById("tiempo-real-intervalo");
+    let segundos = parseInt(inputIntervalo.value, 10);
+    if (!Number.isFinite(segundos) || segundos < INTERVALO_MINIMO_TIEMPO_REAL_SEG) {
+        segundos = INTERVALO_MINIMO_TIEMPO_REAL_SEG;
+        inputIntervalo.value = segundos;
+    }
+
+    estado.tiempoRealActivo = true;
+    limpiarGraficaParaTiempoReal();
+
+    const boton = document.getElementById("boton-tiempo-real");
+    boton.classList.add("boton-actualizar--activo");
+    boton.innerHTML = `<span class="boton-actualizar__icono">●</span> Desactivar`;
+    inputIntervalo.disabled = true;
+    document.getElementById("boton-actualizar").disabled = true;
+
+    tickTiempoReal();
+    estado.tiempoRealIntervaloId = setInterval(tickTiempoReal, segundos * 1000);
+}
+
+function desactivarTiempoReal() {
+    estado.tiempoRealActivo = false;
+    clearInterval(estado.tiempoRealIntervaloId);
+    estado.tiempoRealIntervaloId = null;
+    ocultarAvisoTiempoReal();
+
+    const boton = document.getElementById("boton-tiempo-real");
+    boton.classList.remove("boton-actualizar--activo");
+    boton.innerHTML = `<span class="boton-actualizar__icono">●</span> Tiempo Real`;
+    document.getElementById("tiempo-real-intervalo").disabled = false;
+    document.getElementById("boton-actualizar").disabled = false;
+
+    restaurarGraficaNormal();
+    cargarActual();
+}
+
+function initTiempoReal() {
+    document.getElementById("boton-tiempo-real").addEventListener("click", () => {
+        if (estado.tiempoRealActivo) {
+            desactivarTiempoReal();
+        } else {
+            activarTiempoReal();
+        }
+    });
+}
+
+window.addEventListener("beforeunload", () => {
+    if (estado.tiempoRealActivo) clearInterval(estado.tiempoRealIntervaloId);
+});
+
 // ─── Inicio ──────────────────────────────────────────────────────────────────
 initTema();
 initArbolClicks();
@@ -1030,5 +1225,6 @@ cargarArbol();
 initDesplazador();
 initColumnaReservada();
 initBotonActualizar();
+initTiempoReal();
 document.getElementById("grafica").addEventListener("wheel", manejarZoomScroll, { passive: false });
-setInterval(() => { cargarActual(); refrescarHistorico(); }, 5 * 60 * 1000);
+setInterval(() => { if (!estado.tiempoRealActivo) { cargarActual(); refrescarHistorico(); } }, 5 * 60 * 1000);

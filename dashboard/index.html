@@ -41,6 +41,14 @@
                 <button id="boton-actualizar" class="boton-actualizar" title="Descargar lecturas nuevas de los servidores">
                     <span class="boton-actualizar__icono">↻</span> Actualizar
                 </button>
+                <div class="tiempo-real-controles" id="tiempo-real-controles">
+                    <label class="tiempo-real-controles__intervalo" title="Segundos entre cada lectura en vivo">
+                        <input type="number" id="tiempo-real-intervalo" min="3" step="1" value="5">s
+                    </label>
+                    <button id="boton-tiempo-real" class="boton-actualizar" title="Leer CPU/GPU en vivo por SSH, cada X segundos">
+                        <span class="boton-actualizar__icono">●</span> Tiempo Real
+                    </button>
+                </div>
             </div>
         </section>
 

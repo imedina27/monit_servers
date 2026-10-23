@@ -1,0 +1,40 @@
+# Inventario de PRUEBA para el sandbox de "Tiempo Real" -- apunta a los
+# contenedores de sandbox/docker-compose.yml (puertos expuestos en
+# 127.0.0.1), NUNCA al inventario_servidores.yaml real. Se usa poniendo
+# INVENTARIO_PATH=sandbox/inventario_servidores.sandbox.yaml al correr el
+# backend en modo desarrollo (ver sandbox/README.md).
+servidores:
+  - nombre: sandbox_directo
+    grupo: Sandbox
+    sistema_operativo: ubuntu
+    activo: true
+    ip: 127.0.0.1
+    puerto: 2203
+    usuario: monitor
+    password: monitor
+    directorio_remoto: /home/monitor/datos
+
+  - nombre: sandbox_gateway
+    grupo: Sandbox
+    sistema_operativo: ubuntu
+    activo: true
+    ip: 127.0.0.1
+    puerto: 2202
+    usuario: monitor
+    password: monitor
+    directorio_remoto: /home/monitor/datos
+    directorio_relay: /home/monitor/relay_entrante
+    es_gateway_de: [sandbox_companero]
+    ruta_repo: /opt/monit_servers_v2
+
+  - nombre: sandbox_companero
+    grupo: Sandbox
+    sistema_operativo: ubuntu
+    activo: false
+    directorio_remoto: /home/monitor/datos
+
+  - nombre: sandbox_sin_ruta
+    grupo: Sandbox
+    sistema_operativo: ubuntu
+    activo: false
+    directorio_remoto: /home/monitor/datos

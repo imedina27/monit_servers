@@ -1,0 +1,15 @@
+#!/bin/bash
+# Stub de 'lm-sensors' para el sandbox -- un contenedor no trae sensores
+# reales, asi que esto imprime temperaturas falsas pero realistas (y
+# cambiantes, para que el chart de "Tiempo Real" se vea moverse).
+t_pkg=$(( (RANDOM % 15) + 40 ))
+t_core0=$(( (RANDOM % 15) + 38 ))
+t_core1=$(( (RANDOM % 15) + 38 ))
+
+cat <<EOF
+coretemp-isa-0000
+Adapter: ISA adapter
+Package id 0:  +${t_pkg}.0°C  (high = +90.0°C, crit = +100.0°C)
+Core 0:        +${t_core0}.0°C  (high = +90.0°C, crit = +100.0°C)
+Core 1:        +${t_core1}.0°C  (high = +90.0°C, crit = +100.0°C)
+EOF

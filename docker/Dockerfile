@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend backend
 COPY dashboard dashboard
 COPY ingesta ingesta
+COPY comun comun
 
 # ingesta/ necesita escritura propia para su log (ingesta/ingesta.log); pendientes_offline/ llega
 # aparte como volumen del host y no depende de esto.
