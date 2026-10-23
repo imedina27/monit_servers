@@ -1,0 +1,4 @@
+#!/bin/bash
+# Stub de 'nvidia-smi' para el sandbox. Solo soporta la forma exacta que usa
+# el colector/el backend: --query-gpu=temperature.gpu --format=csv,noheader,nounits
+echo $(( (RANDOM % 20) + 50 ))

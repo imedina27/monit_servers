@@ -1,0 +1,10 @@
+# Variante de companeros.sandbox.yaml para el sandbox SIN Docker (ver
+# servidor_falso.py / levantar_sandbox.py) -- todo corre en 127.0.0.1, cada
+# "servidor" es en realidad un puerto distinto del mismo proceso Python.
+companeros:
+  - nombre: sandbox_companero
+    ip: 127.0.0.1
+    puerto: 2204
+    usuario: monitor
+    password: monitor
+    directorio_remoto: /home/monitor/datos

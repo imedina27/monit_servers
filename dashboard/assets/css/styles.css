@@ -156,6 +156,43 @@ body {
 .boton-actualizar.cargando .boton-actualizar__icono {
     animation: girar 1s linear infinite;
 }
+.boton-actualizar--activo {
+    background-color: var(--acento);
+    border-color: var(--acento);
+    color: var(--fondo);
+}
+.boton-actualizar--activo .boton-actualizar__icono {
+    animation: pulso 1.2s ease-in-out infinite;
+}
+@keyframes pulso {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+.boton-actualizar:disabled.boton-actualizar--deshabilitado-tiempo-real {
+    opacity: 0.4;
+}
+.tiempo-real-controles {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.tiempo-real-controles__intervalo {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--texto-secundario);
+}
+.tiempo-real-controles__intervalo input {
+    width: 48px;
+    background-color: var(--superficie);
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: 6px;
+    padding: 6px 6px;
+    font-family: inherit;
+    font-size: 13px;
+}
 @keyframes girar {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }

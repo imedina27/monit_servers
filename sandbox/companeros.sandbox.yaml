@@ -1,0 +1,10 @@
+# Copia de ejemplo de relay/companeros.yaml, horneada DENTRO del contenedor
+# sandbox-gateway (ver Dockerfile.gateway) -- nunca se usa fuera de Docker,
+# y nunca es el companeros.yaml real de ningun sitio.
+companeros:
+  - nombre: sandbox_companero
+    ip: sandbox-companero
+    puerto: 22
+    usuario: monitor
+    password: monitor
+    directorio_remoto: /home/monitor/datos

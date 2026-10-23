@@ -1,0 +1,33 @@
+# Entorno de prueba para "Tiempo Real" -- replica los 3 casos de
+# backend/ssh_lectura_directa.py sin tocar inventario_servidores.yaml,
+# relay/companeros.yaml ni ningun servidor real. Ver sandbox/README.md.
+services:
+  sandbox-directo:
+    build:
+      context: .
+      dockerfile: Dockerfile.servidor
+    hostname: sandbox-directo
+    ports:
+      - "2203:22"
+    networks: [sandbox-net]
+
+  sandbox-companero:
+    build:
+      context: .
+      dockerfile: Dockerfile.servidor
+    hostname: sandbox-companero
+    networks: [sandbox-net]  # sin 'ports': no debe ser alcanzable desde fuera, igual que un companero real
+
+  sandbox-gateway:
+    build:
+      context: ..
+      dockerfile: sandbox/Dockerfile.gateway
+    hostname: sandbox-gateway
+    depends_on: [sandbox-companero]
+    ports:
+      - "2202:22"
+    networks: [sandbox-net]
+
+networks:
+  sandbox-net:
+    driver: bridge

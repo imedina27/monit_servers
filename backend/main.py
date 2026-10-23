@@ -17,6 +17,8 @@ load_dotenv(PROJECT_DIR / ".env")
 # sin tener que lanzar un proceso aparte.
 sys.path.insert(0, str(PROJECT_DIR / "ingesta"))
 
+import ssh_lectura_directa as tiempo_real  # noqa: E402
+
 # Fallback cuando un servidor no tiene fila propia en la tabla 'umbrales' --
 # no es dato de ningun servidor en particular, por eso vive aqui y no en la BD.
 UMBRALES_DEFAULT = {
@@ -169,6 +171,39 @@ def temperatura_actual(nombre: str):
             (servidor_id,),
         )
         filas = cur.fetchall()
+
+    for fila in filas:
+        rangos = umbrales_servidor.get(fila["componente"]) or UMBRALES_DEFAULT.get(fila["componente"])
+        fila["estado"] = calcular_estado(rangos, float(fila["temperatura_c"]))
+    return filas
+
+
+@app.get("/api/servidores/{nombre}/tiempo_real/disponible")
+def tiempo_real_disponible(nombre: str):
+    """
+    Si el boton "Tiempo Real" del dashboard debe mostrarse habilitado para
+    este servidor -- ver ssh_lectura_directa.py para los 3 casos posibles
+    (directo, companero de un gateway, o sin ninguna ruta SSH).
+    """
+    disponible, motivo = tiempo_real.disponibilidad(nombre)
+    return {"disponible": disponible, "motivo": motivo}
+
+
+@app.get("/api/servidores/{nombre}/tiempo_real/lectura")
+def tiempo_real_lectura(nombre: str):
+    """
+    Una lectura puntual de CPU/GPU en vivo (SSH directo, no ingesta por
+    lotes). No se persiste en la base de datos -- es efimera, solo se usa
+    para refrescar el dashboard mientras "Tiempo Real" este activo.
+    """
+    with conectar_db() as conn, conn.cursor(row_factory=dict_row) as cur:
+        servidor_id = obtener_servidor_id(cur, nombre)
+        umbrales_servidor = obtener_umbrales_servidor(cur, servidor_id)
+
+    try:
+        filas = tiempo_real.obtener_lectura(nombre)
+    except tiempo_real.LecturaNoDisponible as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
     for fila in filas:
         rangos = umbrales_servidor.get(fila["componente"]) or UMBRALES_DEFAULT.get(fila["componente"])

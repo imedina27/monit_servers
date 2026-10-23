@@ -66,6 +66,13 @@ servidores:
   #   directorio_remoto: /home/tu_usuario/monit_servers_v2/colector_ubuntu/lecturas
   #   directorio_relay: /home/tu_usuario/monit_servers_v2/relay/relay_entrante
   #   es_gateway_de: [servidor_04]
+  #   # Requerido para el boton "Tiempo Real" del dashboard en los companeros
+  #   # de este gateway (backend/ssh_lectura_directa.py): ruta ABSOLUTA del
+  #   # repo EN ESTA MISMA MAQUINA gateway (no en DEVELOP) -- ahi es donde
+  #   # vive relay/leer_companero.py que el backend central invoca por SSH
+  #   # para delegarle la lectura. Sin este campo, Tiempo Real no se habilita
+  #   # para sus companeros (no se adivina/deduce, a proposito).
+  #   ruta_repo: /home/tu_usuario/monit_servers_v2
 
   # Los companeros del gateway tambien necesitan su propia entrada (activo:
   # false, igual que cualquier servidor offline), para que procesar_offline()

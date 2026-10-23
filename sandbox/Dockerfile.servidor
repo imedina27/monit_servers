@@ -1,0 +1,19 @@
+# Simula un servidor monitoreado (directo o companero de relay): sshd +
+# stubs de sensors/nvidia-smi. Usado para los 3 contenedores del sandbox de
+# "Tiempo Real" (directo, gateway, companero) -- el gateway ademas usa
+# Dockerfile.gateway, que parte de este mismo Dockerfile.
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /var/run/sshd && \
+    useradd -m -s /bin/bash monitor && \
+    echo "monitor:monitor" | chpasswd && \
+    mkdir -p /home/monitor/datos && chown monitor:monitor /home/monitor/datos
+
+COPY sensors /usr/local/bin/sensors
+COPY nvidia-smi /usr/local/bin/nvidia-smi
+RUN chmod +x /usr/local/bin/sensors /usr/local/bin/nvidia-smi
+
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D"]
