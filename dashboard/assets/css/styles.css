@@ -32,6 +32,12 @@
    combinacion principal de la marca -> tema oscuro por defecto.
    ============================================================ */
 :root {
+    /* Los controles nativos del navegador (spinners de <input type="number">,
+       scrollbars, etc.) no siguen las variables de arriba -- sin esto,
+       Chrome/Edge los pinta con su tema claro por defecto aunque el resto de
+       la pagina este en oscuro (ej. las flechitas del input de "Tiempo Real"). */
+    color-scheme: dark;
+
     --acento: #E2724B;
     --acento-tenue: rgba(226, 114, 75, 0.15);
 
@@ -61,6 +67,8 @@
 }
 
 :root[data-theme="claro"] {
+    color-scheme: light;
+
     --fondo: #F9F9F7;
     --superficie: #FFFFFF;
     --superficie-2: #F1EFEA;
@@ -715,6 +723,9 @@ th {
     justify-content: space-between;
     gap: 12px;
     margin-top: 32px;
+    padding: 20px 0;
+    border-top: 1px solid var(--borde);
+    border-bottom: 1px solid var(--borde);
     flex-wrap: wrap;
 }
 
