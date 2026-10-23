@@ -43,6 +43,11 @@ Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
   nosotros no. Colector, ingesta y backend actualizados para calcularlo igual que `df`
   (paso 20; requiere actualizar el colector en cada servidor y migrar la base de datos,
   ver ROADMAP).
+- `scripts/desempaquetar_offline.py` se caía con un traceback si DEVELOP no estaba
+  disponible al subir un `.zip` (red caída, host apagado, timeout de SSH) — abortaba de
+  golpe el procesamiento de todos los `.zip` restantes del lote. Ahora lo detecta, deja
+  los `.zip` pendientes intactos para reintentar después, y muestra un mensaje claro en
+  vez de un crash.
 
 ## [v2.0.0] - 2026-10-11
 
