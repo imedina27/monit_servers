@@ -17,6 +17,12 @@ load_dotenv(PROJECT_DIR / ".env")
 # sin tener que lanzar un proceso aparte.
 sys.path.insert(0, str(PROJECT_DIR / "ingesta"))
 
+# backend/ se importa como paquete ("backend.main", ver docker/Dockerfile) --
+# su propia carpeta no queda en sys.path solo por eso, hay que agregarla a
+# mano para poder importar ssh_lectura_directa.py como modulo suelto, igual
+# que arriba con ingesta/.
+sys.path.insert(0, str(BASE_DIR))
+
 import ssh_lectura_directa as tiempo_real  # noqa: E402
 
 # Fallback cuando un servidor no tiene fila propia en la tabla 'umbrales' --
