@@ -696,6 +696,24 @@ th {
 .memoria-barra__segmento {
     height: 100%;
 }
+.memoria-barra__leyenda {
+    display: flex;
+    gap: 14px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--texto-secundario);
+}
+.memoria-barra__leyenda-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.memoria-barra__leyenda-punto {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
 
 /* ============================================================
    Slider de fecha para "Uso de disco" (reutiliza la agrupacion

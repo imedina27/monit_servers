@@ -1106,12 +1106,17 @@ function construirBarraMemoria(memoria) {
     // Replica el desglose de "htop" (usado/buffers/cache), paleta categorica
     // fija del proyecto (misma de CPU/GPU en la grafica) -- nunca ciclada.
     const segmentos = [
-        { mb: memoria.usado_mb, color: "--serie-1" },
-        { mb: memoria.buffers_mb, color: "--serie-2" },
-        { mb: memoria.cache_mb, color: "--serie-3" },
+        { mb: memoria.usado_mb, color: "--serie-1", etiqueta: "Usado" },
+        { mb: memoria.buffers_mb, color: "--serie-2", etiqueta: "Buffers" },
+        { mb: memoria.cache_mb, color: "--serie-3", etiqueta: "Cache" },
     ];
     const segmentosHtml = segmentos.map(s => `
         <div class="memoria-barra__segmento" style="width:${Math.max(0, s.mb / memoria.total_mb * 100)}%; background-color:${cssVar(s.color)}"></div>
+    `).join("");
+    // Leyenda -- sin esto los 3 colores no se entienden solos (a diferencia de
+    // la barra de Swap, que es un solo color + %, autoexplicativa).
+    const leyendaHtml = segmentos.map(s => `
+        <span class="memoria-barra__leyenda-item"><span class="memoria-barra__leyenda-punto" style="background-color:${cssVar(s.color)}"></span>${s.etiqueta}</span>
     `).join("");
 
     const aGb = (mb) => (mb / 1024).toFixed(1);
@@ -1123,6 +1128,7 @@ function construirBarraMemoria(memoria) {
                 <span><span class="ficha-hardware__secundario">${aGb(memoria.usado_mb)} GB de ${aGb(memoria.total_mb)} GB</span> · <span class="disco-barra__porcentaje" data-estado="${memoria.estado}">${memoria.porcentaje}%</span></span>
             </div>
             <div class="memoria-barra">${segmentosHtml}</div>
+            <div class="memoria-barra__leyenda">${leyendaHtml}</div>
         </div>
         <div class="memoria-barra-bloque">
             <div class="disco-barra__fila">
