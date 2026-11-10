@@ -743,6 +743,119 @@ valor final confirmado.
 
 **Paso 21 cerrado.**
 
+## 22. "Tiempo Real" — CPU/GPU en vivo por SSH bajo demanda ✅
+
+A petición del usuario: poder ver la temperatura de CPU/GPU actualizándose cada pocos
+segundos (no solo la última lectura por hora del colector), sin esperar al ciclo normal
+de ingesta.
+
+### Decisiones de diseño (documentadas antes de tocar producción)
+
+- **Tres casos posibles por servidor** (`backend/ssh_lectura_directa.py`): "directo" (SSH
+  directo con las credenciales que ya usa la ingesta), "companero" (detrás de un gateway,
+  ver abajo), "no_disponible" (sitio 100% offline sin ninguna ruta, ej. AbInBev) — en este
+  último el botón queda deshabilitado, no solo falla al usarlo.
+- **El backend central nunca tiene las credenciales de un compañero**: para un servidor
+  detrás de un gateway, se delega la lectura al propio gateway (que ya tiene esas
+  credenciales en `relay/companeros.yaml`) en vez de centralizarlas — mantiene la misma
+  frontera de confianza que ya usa el relay (paso 14). El gateway corre
+  [`relay/leer_companero.py`](relay/leer_companero.py) (script puntual, no un proceso
+  persistente) vía SSH `exec_command`, usando una ruta nueva y **obligatoria y explícita a
+  propósito** en el inventario (`ruta_repo`, la ruta absoluta del repo en ESA máquina
+  gateway) — nunca se adivina/deriva, para no apuntar a una ruta equivocada en silencio.
+- Diseñado primero con diagrama de flujo/secuencia (caso compañero-vía-gateway) y
+  aprobado por el usuario antes de escribir código.
+
+### Sandbox (antes de tocar nada real)
+
+- Se intentó primero un sandbox con Docker (`sandbox/docker-compose.yml`), mismo criterio
+  del paso 13 — no se pudo validar porque Docker no está disponible en la máquina del
+  usuario.
+- Alternativa 100% Python construida y validada: `sandbox/servidor_falso.py` (servidor SSH
+  real en modo servidor de `paramiko`, responde a los mismos comandos que
+  `ssh_lectura_directa.py`/`leer_companero.py`) + `sandbox/levantar_sandbox.py` (orquesta 3
+  instancias: directo, gateway, compañero — el "gateway" corre `relay/leer_companero.py`
+  de verdad, no un stub). Bug encontrado y corregido: un cliente SSH real abre un canal
+  nuevo por cada `exec_command` sobre la misma conexión; la primera versión cerraba el
+  `Transport` tras un solo comando, rompiendo el segundo con `EOFError` — corregido con un
+  loop de canales por conexión.
+- Validados los 3 casos (directo, compañero-vía-gateway con delegación real, y falla
+  limpia si un servidor se apaga a medio uso) antes de pasar a producción.
+
+### Implementado y desplegado a producción ✅ (2026-10-23)
+
+- **Backend**: [`comun/parseo_sensores.py`](comun/parseo_sensores.py) (parseo compartido
+  entre backend y gateway, a diferencia de `colector_ubuntu/monitor.py` que se duplica a
+  propósito por correr aislado en cada servidor); `ssh_lectura_directa.py` con pool de
+  sesiones SSH (60s de inactividad) y caché anti-ráfaga (2s, evita doble `exec_command` por
+  doble pestaña o intervalo mal puesto); endpoints nuevos
+  `GET /api/servidores/{nombre}/tiempo_real/disponible` y
+  `GET /api/servidores/{nombre}/tiempo_real/lectura`.
+- **Dashboard**: botón "Tiempo Real" + input de segundos (mínimo 3s) junto a "Actualizar";
+  mientras está activo reemplaza la gráfica histórica por la serie en vivo (acotada a 100
+  puntos) y sigue actualizando las tarjetas de valor; se apaga solo al cambiar de servidor
+  o cerrar la pestaña.
+- **Bugs reales encontrados en el despliegue** (no vistos en el sandbox): `docker/Dockerfile`
+  no copiaba `comun/` a la imagen (habría roto el arranque del backend); `import
+  ssh_lectura_directa` fallaba dentro de Docker porque `uvicorn backend.main:app` carga
+  `backend` como paquete (el directorio propio no queda en `sys.path` automáticamente) —
+  corregido con `sys.path.insert` explícito (commit `46994ee`); `curl localhost:8000` no
+  respondía porque `BIND_IP` en `docker/.env` publica el puerto en una IP de LAN
+  específica, no en `127.0.0.1`.
+- **Despliegue real a los 2 gateways de producción** (`apiman-fase1`, `quantumdata`): sin
+  `git` (sus archivos se subieron a mano desde el principio, no por clon) — `comun/` y
+  `relay/leer_companero.py` copiados por `scp` desde DEVELOP.
+- **Confirmado contra producción real** en los 3 casos: servidor directo, dos compañeros
+  vía dos gateways distintos, y un sitio 100% offline correctamente excluido (botón
+  deshabilitado).
+- **Ajustes visuales** tras confirmar en producción (commit `e3344aa`): `color-scheme`
+  (los spinners nativos del input de segundos se veían de tema claro en modo oscuro);
+  separadores visuales entre tarjetas/controles/gráfica.
+- [`instalar.md`](instalar.md) (commit `dbe0e15`): runbook paso a paso para dar de alta un
+  servidor nuevo en sus 4 variantes posibles, incluyendo cómo habilitar "Tiempo Real" en
+  cada una.
+
+**Paso 22 cerrado.**
+
+## 23. RAM/Swap "en vivo" dentro de "Tiempo Real" ✅
+
+A petición del usuario, extendiendo el paso 22: ver también el uso de memoria RAM/Swap
+mientras "Tiempo Real" está activo, con un estilo de barra inspirado en `htop`.
+
+### Decisión de diseño
+
+- **`htop` descartado como mecanismo de lectura**: es una TUI interactiva sin modo batch
+  confiable para scripting. En su lugar, `cat /proc/meminfo` por SSH (mismo criterio ya
+  usado para los `thermal_zones` de CPU en ARM — leer directo el pseudo-filesystem del
+  kernel, sin depender de un paquete externo como `free`).
+- El desglose visual sí replica a `htop` (barra de 3 segmentos: usado/buffers/cache, más
+  una barra de Swap aparte) — calculado con el mismo ajuste que hace `htop`
+  (`Cached + SReclaimable - Shmem`, para no contar la memoria compartida dos veces).
+
+### Implementado ✅ (2026-11-09, validado en sandbox)
+
+- **Backend**: `parsear_meminfo()` nuevo en `comun/parseo_sensores.py`; `_leer_memoria()`
+  en `ssh_lectura_directa.py` y `relay/leer_companero.py` (mismo patrón de
+  `exec_command` que ya usan para CPU/GPU, reutilizando la misma sesión SSH).
+  `GET /tiempo_real/lectura` cambia de forma — de una lista plana a
+  `{"sensores": [...], "memoria": {...}, "medido_en": ...}` — porque el % de RAM no es
+  "una temperatura más" (unidad y semántica distintas).
+  Umbrales nuevos (sin migración de BD, la tabla `umbrales` ya acepta cualquier
+  `componente` de texto libre): `ram` verde ≤75%/ámbar ≤90%, `swap` verde ≤10%/ámbar ≤50%
+  (cualquier swap en uso ya es señal de que la RAM no alcanzó — umbral deliberadamente más
+  estricto que el de RAM).
+- **Dashboard**: bloque nuevo entre los controles ("Por hora/día/mes" + Actualizar +
+  Tiempo Real) y "Temperatura CPU/GPU" — solo existe mientras "Tiempo Real" está activo.
+  Aparece animado (`grid-template-rows: 0fr → 1fr` + `translateY`, curva "ease-out" de
+  650-700ms) empujando el resto del contenido hacia abajo por flujo normal del documento
+  (sin animar cada sección por separado); se revela con la primera lectura real (no antes,
+  para no mostrar una barra vacía) y colapsa al desactivar.
+- **Sandbox**: `sandbox/servidor_falso.py` extendido para responder `cat /proc/meminfo`
+  con datos de ejemplo — los 3 casos (directo, compañero-vía-gateway real, sin ruta)
+  validados de nuevo end-to-end, incluyendo el cálculo de semáforo contra Postgres real.
+
+**Paso 23 cerrado.**
+
 ## Pendiente de decidir
 
 - ~~Valores exactos de los umbrales de temperatura para el semáforo (paso 6, backend).~~ Resuelto el 2026-10-05 — umbral por servidor en Postgres (tabla `umbrales`), con valores investigados por modelo real de CPU/GPU (Intel ARK, AMD, NVIDIA; algunos estimados por convención de generación donde el fabricante no publica Tjmax exacto por SKU). El default genérico (70/85°C CPU, 75/85°C GPU) se queda como fallback en `backend/main.py` para servidores sin hardware identificado todavía (ej. QLYMSPROD01/02 de AbInBev, sitio offline sin acceso).

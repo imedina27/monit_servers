@@ -36,6 +36,26 @@ def salida_nvidia_smi():
     return f"{random.randint(50, 70)}\n"
 
 
+def salida_meminfo():
+    total_kb = 16369420
+    libre_kb = random.randint(1_500_000, 3_000_000)
+    buffers_kb = random.randint(300_000, 600_000)
+    cached_kb = random.randint(4_000_000, 7_000_000)
+    swap_total_kb = 4194304
+    swap_libre_kb = random.randint(500_000, swap_total_kb)
+    return (
+        f"MemTotal:       {total_kb} kB\n"
+        f"MemFree:        {libre_kb} kB\n"
+        f"Buffers:        {buffers_kb} kB\n"
+        f"Cached:         {cached_kb} kB\n"
+        f"SwapCached:            0 kB\n"
+        f"Shmem:              150000 kB\n"
+        f"SReclaimable:       300000 kB\n"
+        f"SwapTotal:      {swap_total_kb} kB\n"
+        f"SwapFree:       {swap_libre_kb} kB\n"
+    )
+
+
 class _ServerInterfaceFalso(paramiko.ServerInterface):
     def __init__(self):
         self.evento_comando = threading.Event()
@@ -71,6 +91,8 @@ def _responder_comando(comando, con_gpu, ejecutor_extra):
         return ("/usr/bin/nvidia-smi\n" if con_gpu else ""), "", 0
     if "nvidia-smi --query-gpu" in comando:
         return (salida_nvidia_smi() if con_gpu else ""), "", 0
+    if comando.strip() == "cat /proc/meminfo":
+        return salida_meminfo(), "", 0
     if ejecutor_extra is not None:
         return ejecutor_extra(comando)
     return "", f"[sandbox] comando no soportado: {comando}", 1

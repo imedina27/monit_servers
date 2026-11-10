@@ -644,6 +644,60 @@ th {
 .disco-barra__relleno[data-estado="rojo"]  { background-color: var(--rojo); }
 
 /* ============================================================
+   Barras de RAM/Swap "en vivo" (solo durante Tiempo Real)
+   ============================================================ */
+/* "grid-template-rows: 0fr -> 1fr" es la tecnica para animar a una altura
+   "auto" sin conocerla de antemano (el contenido es dinamico). El hijo
+   necesita min-height:0 (heredado via el grid item) y overflow:hidden para
+   poder colapsar a 0 -- si no, un grid item nunca baja de su altura de
+   contenido ("min-height: auto" implicito). */
+.tiempo-real-memoria[hidden] { display: none; }
+.tiempo-real-memoria {
+    display: grid;
+    grid-template-rows: 0fr;
+    /* Curva "ease-out" pronunciada (desacelera mucho al final) en vez de un
+       "ease" generico -- se siente mas organico/con peso que una
+       transicion lineal corta. */
+    transition: grid-template-rows 650ms cubic-bezier(0.22, 1, 0.36, 1);
+    margin-bottom: 0;
+}
+.tiempo-real-memoria--visible {
+    grid-template-rows: 1fr;
+    margin-bottom: 18px;
+}
+.tiempo-real-memoria__interior {
+    overflow: hidden;
+    min-height: 0;
+    /* Las barras "entran" desde arriba mientras el contenedor gana altura --
+       un pequeño delay (va "detras" del contenedor, no exacto al mismo
+       tiempo) y mas duracion que el 650ms de arriba acentuan la sensacion
+       de que el contenido se va asentando, no solo apareciendo. */
+    transform: translateY(-16px);
+    opacity: 0;
+    transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1) 40ms,
+                opacity 550ms ease-out 60ms;
+}
+.tiempo-real-memoria--visible .tiempo-real-memoria__interior {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.memoria-barra-bloque + .memoria-barra-bloque {
+    margin-top: 14px;
+}
+.memoria-barra {
+    height: 8px;
+    display: flex;
+    gap: 2px; /* separador entre segmentos, mismo criterio que las franjas de color de las tarjetas */
+    background-color: var(--superficie-2);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.memoria-barra__segmento {
+    height: 100%;
+}
+
+/* ============================================================
    Slider de fecha para "Uso de disco" (reutiliza la agrupacion
    hora/dia/mes de los chips del historico de temperatura)
    ============================================================ */

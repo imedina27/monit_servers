@@ -18,6 +18,11 @@ COMANDO_SENSORS = "sensors"
 COMANDO_WHICH_NVIDIA_SMI = "which nvidia-smi"
 COMANDO_NVIDIA_SMI = "nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits"
 
+# RAM/Swap "en vivo" (boton Tiempo Real) -- /proc/meminfo en vez de 'free' para
+# no depender de un paquete externo (ya es el mismo criterio que
+# COMANDO_THERMAL_ZONES_SSH: leer directo el pseudo-filesystem del kernel).
+COMANDO_MEMINFO_SSH = "cat /proc/meminfo"
+
 # Variante por SSH (exec_command) de la deteccion de thermal zones que hace
 # colector_ubuntu/monitor.py sobre archivos locales -- aqui no hay acceso a
 # archivos locales, solo a lo que el comando remoto imprima.
@@ -94,3 +99,64 @@ def parsear_gpu(salida_nvidia):
         except ValueError:
             pass
     return gpus
+
+
+def parsear_meminfo(salida):
+    """
+    Parsea 'cat /proc/meminfo' a MB. Todos los valores del archivo vienen en
+    kB (aunque diga "kB" el kernel siempre usa 1024, no 1000).
+
+    Replica el desglose que muestra 'htop' en su barra de memoria (usado/
+    buffers/cache) en vez de solo un % -- MemAvailable (kernel >= 3.14) ya
+    hace ese calculo por nosotros para el % real de uso, pero para pintar los
+    3 segmentos de la barra se necesitan los componentes por separado.
+    """
+    valores = {}
+    for linea in salida.splitlines():
+        if ":" not in linea:
+            continue
+        nombre, _, resto = linea.partition(":")
+        crudo = resto.strip().split()
+        if not crudo:
+            continue
+        try:
+            valores[nombre.strip()] = int(crudo[0])
+        except ValueError:
+            continue
+
+    total_kb = valores.get("MemTotal")
+    if not total_kb:
+        return None
+
+    libre_kb = valores.get("MemFree", 0)
+    buffers_kb = valores.get("Buffers", 0)
+    # Cached + SReclaimable (slab reclamable, ej. cache de metadatos de
+    # filesystem) menos Shmem -- Shmem ya esta incluido en Cached por el
+    # kernel pero es memoria "en uso" (tmpfs/shm), no cache liberable; mismo
+    # ajuste que hace htop para no contarla dos veces ni como "cache" libre.
+    cache_kb = valores.get("Cached", 0) + valores.get("SReclaimable", 0) - valores.get("Shmem", 0)
+    cache_kb = max(cache_kb, 0)
+
+    disponible_kb = valores.get("MemAvailable")
+    if disponible_kb is None:
+        disponible_kb = libre_kb + buffers_kb + cache_kb
+    usado_kb = max(total_kb - disponible_kb, 0)
+
+    swap_total_kb = valores.get("SwapTotal", 0)
+    swap_libre_kb = valores.get("SwapFree", 0)
+    swap_usado_kb = max(swap_total_kb - swap_libre_kb, 0)
+
+    def a_mb(kb):
+        return round(kb / 1024, 1)
+
+    return {
+        "total_mb": a_mb(total_kb),
+        "usado_mb": a_mb(usado_kb),
+        "buffers_mb": a_mb(buffers_kb),
+        "cache_mb": a_mb(cache_kb),
+        "libre_mb": a_mb(max(total_kb - usado_kb - buffers_kb - cache_kb, 0)),
+        "porcentaje": round(usado_kb / total_kb * 100, 1),
+        "swap_total_mb": a_mb(swap_total_kb),
+        "swap_usado_mb": a_mb(swap_usado_kb),
+        "swap_porcentaje": round(swap_usado_kb / swap_total_kb * 100, 1) if swap_total_kb else 0,
+    }

@@ -7,6 +7,14 @@ Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
 
 ### Added
 
+- **Botón "Tiempo Real"** (paso 22): lee CPU/GPU en vivo por SSH bajo demanda (no solo la
+  última lectura por hora del colector), cada X segundos configurables. Para servidores
+  detrás de un gateway, delega la lectura al propio gateway (`relay/leer_companero.py`) en
+  vez de centralizar las credenciales del compañero en el backend. Deshabilitado
+  automáticamente en sitios 100% offline sin ninguna ruta SSH posible.
+- **RAM/Swap en vivo dentro de "Tiempo Real"** (paso 23): barra de memoria con desglose
+  usado/buffers/cache (estilo `htop`, leído de `/proc/meminfo` por SSH) + barra de Swap,
+  con umbrales propios (`ram`, `swap`) en el semáforo verde/ámbar/rojo.
 - Tarjetas "Umbral CPU"/"Umbral GPU" en el dashboard (verde/ámbar/rojo configurados por
   servidor en Postgres), junto a las tarjetas de temperatura (paso 17).
 
@@ -17,6 +25,11 @@ Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
 
 ### Fixed
 
+- `docker/Dockerfile` no copiaba `comun/` a la imagen del backend — habría hecho fallar el
+  arranque (`ModuleNotFoundError`) en cuanto se desplegara el paso 22.
+- `import ssh_lectura_directa` fallaba dentro de Docker: `uvicorn backend.main:app` carga
+  `backend` como paquete, así que su propio directorio no queda en `sys.path`
+  automáticamente — corregido con un `sys.path.insert` explícito.
 - `/api/servidores/{nombre}/historico` y `/disco/historico` ya no agregaban TODO el
   histórico de la tabla en cada carga — en servidores con meses de datos (`DEVELOP`,
   `MINI_LENOVO`) eso tardaba 1.5-3.4s por clic en el árbol, dejando la info del servidor

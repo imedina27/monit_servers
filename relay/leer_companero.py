@@ -11,7 +11,7 @@ ejecucion puntual bajo demanda, no un proceso persistente.
 
 Uso: python3 leer_companero.py <nombre_companero>
 
-Imprime a stdout un JSON {"cpu": {...}, "gpu": {...}, "medido_en": "..."} y
+Imprime a stdout un JSON {"cpu": {...}, "gpu": {...}, "ram": {...}, "medido_en": "..."} y
 termina con exit code 0. Si algo falla, imprime el error a stderr y termina
 con exit code 1 -- asi el backend central distingue "este companero fallo"
 de un crash sin mensaje (mismo criterio que DevelopNoDisponible en
@@ -89,12 +89,16 @@ def leer_companero(nombre_companero):
         if salida_which_gpu:
             salida_gpu, _ = _ejecutar(cliente, parseo_sensores.COMANDO_NVIDIA_SMI)
             gpu = parseo_sensores.parsear_gpu(salida_gpu)
+
+        salida_meminfo, _ = _ejecutar(cliente, parseo_sensores.COMANDO_MEMINFO_SSH)
+        ram = parseo_sensores.parsear_meminfo(salida_meminfo) if salida_meminfo else None
     finally:
         cliente.close()
 
     return {
         "cpu": cpu,
         "gpu": gpu,
+        "ram": ram,
         "medido_en": datetime.now(timezone.utc).isoformat(),
     }
 

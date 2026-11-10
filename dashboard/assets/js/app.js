@@ -1092,6 +1092,82 @@ function restaurarGraficaNormal() {
     }
 }
 
+// ─── Barras de RAM/Swap "en vivo" -- solo existen mientras Tiempo Real esta
+// activo (ver activarTiempoReal/desactivarTiempoReal). El bloque se inserta
+// arriba de las tarjetas CPU/GPU (#tarjetas-fila) para que, al animar su
+// altura, todo lo que esta debajo en el flujo normal del documento (tarjetas,
+// grafica, uso de disco) se desplace hacia abajo solo -- no hace falta animar
+// cada seccion por separado.
+function construirBarraMemoria(memoria) {
+    if (!memoria) {
+        return `<p class="mensaje-vacio">Sin datos de memoria en esta lectura.</p>`;
+    }
+
+    // Replica el desglose de "htop" (usado/buffers/cache), paleta categorica
+    // fija del proyecto (misma de CPU/GPU en la grafica) -- nunca ciclada.
+    const segmentos = [
+        { mb: memoria.usado_mb, color: "--serie-1" },
+        { mb: memoria.buffers_mb, color: "--serie-2" },
+        { mb: memoria.cache_mb, color: "--serie-3" },
+    ];
+    const segmentosHtml = segmentos.map(s => `
+        <div class="memoria-barra__segmento" style="width:${Math.max(0, s.mb / memoria.total_mb * 100)}%; background-color:${cssVar(s.color)}"></div>
+    `).join("");
+
+    const aGb = (mb) => (mb / 1024).toFixed(1);
+
+    return `
+        <div class="memoria-barra-bloque">
+            <div class="disco-barra__fila">
+                <span>RAM</span>
+                <span><span class="ficha-hardware__secundario">${aGb(memoria.usado_mb)} GB de ${aGb(memoria.total_mb)} GB</span> · <span class="disco-barra__porcentaje" data-estado="${memoria.estado}">${memoria.porcentaje}%</span></span>
+            </div>
+            <div class="memoria-barra">${segmentosHtml}</div>
+        </div>
+        <div class="memoria-barra-bloque">
+            <div class="disco-barra__fila">
+                <span>Swap</span>
+                <span><span class="ficha-hardware__secundario">${aGb(memoria.swap_usado_mb)} GB de ${aGb(memoria.swap_total_mb)} GB</span> · <span class="disco-barra__porcentaje" data-estado="${memoria.swap_estado}">${memoria.swap_porcentaje}%</span></span>
+            </div>
+            <div class="disco-barra">
+                <div class="disco-barra__relleno" data-estado="${memoria.swap_estado}" style="width:${Math.min(memoria.swap_porcentaje, 100)}%"></div>
+            </div>
+        </div>
+    `;
+}
+
+// Se llama en cada tick de Tiempo Real. La primera vez que hay datos "revela"
+// el bloque (dispara la animacion de entrada); los siguientes ticks solo
+// actualizan el contenido ya visible, sin re-animar.
+function actualizarMemoriaTiempoReal(memoria) {
+    const contenedor = document.getElementById("tiempo-real-memoria");
+    document.getElementById("memoria-contenido").innerHTML = construirBarraMemoria(memoria);
+
+    if (!contenedor.classList.contains("tiempo-real-memoria--visible")) {
+        contenedor.hidden = false;
+        // Fuerza un reflow entre quitar "hidden" y agregar la clase que
+        // dispara la transicion -- si ambas cosas pasan en el mismo frame,
+        // el navegador puede saltarse la animacion y aplicar el estado final
+        // de una vez.
+        contenedor.getBoundingClientRect();
+        requestAnimationFrame(() => contenedor.classList.add("tiempo-real-memoria--visible"));
+    }
+}
+
+function ocultarMemoriaTiempoReal() {
+    const contenedor = document.getElementById("tiempo-real-memoria");
+    if (contenedor.hidden) return;
+
+    contenedor.classList.remove("tiempo-real-memoria--visible");
+    const alTerminarColapso = (ev) => {
+        if (ev.target !== contenedor) return;
+        contenedor.hidden = true;
+        document.getElementById("memoria-contenido").innerHTML = "";
+        contenedor.removeEventListener("transitionend", alTerminarColapso);
+    };
+    contenedor.addEventListener("transitionend", alTerminarColapso);
+}
+
 // Acumula cada lectura en estado.tiempoRealPuntos (una serie por sensor,
 // acotada a MAX_PUNTOS_TIEMPO_REAL) y redibuja grafica + leyenda + tarjetas.
 // Mismo shape de 'lecturas' que /actual, asi reusa pintarTarjetasValor tal cual.
@@ -1153,10 +1229,11 @@ async function tickTiempoReal() {
     if (!estado.tiempoRealActivo || !estado.servidor) return;
     const servidorPedido = estado.servidor;
     try {
-        const lecturas = await obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/tiempo_real/lectura`);
+        const resultado = await obtenerJSON(`${API}/servidores/${encodeURIComponent(estado.servidor)}/tiempo_real/lectura`);
         if (estado.servidor !== servidorPedido || !estado.tiempoRealActivo) return;
         ocultarAvisoTiempoReal();
-        procesarLecturaTiempoReal(lecturas);
+        procesarLecturaTiempoReal(resultado.sensores);
+        actualizarMemoriaTiempoReal(resultado.memoria);
     } catch (e) {
         if (estado.servidor !== servidorPedido || !estado.tiempoRealActivo) return;
         // No se apaga solo ni se detiene el loop -- mismo criterio que el
@@ -1201,6 +1278,7 @@ function desactivarTiempoReal() {
     document.getElementById("boton-actualizar").disabled = false;
 
     restaurarGraficaNormal();
+    ocultarMemoriaTiempoReal();
     cargarActual();
 }
 

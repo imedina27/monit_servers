@@ -30,6 +30,13 @@ import ssh_lectura_directa as tiempo_real  # noqa: E402
 UMBRALES_DEFAULT = {
     "cpu": {"verde_max": 70, "ambar_max": 85},
     "gpu": {"verde_max": 75, "ambar_max": 85},
+    # % de uso -- no hay override por servidor todavia (igual que UMBRAL_DISCO),
+    # se puede agregar despues sin migracion (la tabla 'umbrales' ya acepta
+    # cualquier 'componente' de texto libre).
+    "ram": {"verde_max": 75, "ambar_max": 90},
+    # Cualquier swap en uso ya es una senal de que la RAM no alcanzo -- umbral
+    # mas estricto que el de RAM misma a proposito.
+    "swap": {"verde_max": 10, "ambar_max": 50},
 }
 
 # Umbral de ocupacion de disco (%) -- igual para todos los servidores, no
@@ -198,7 +205,7 @@ def tiempo_real_disponible(nombre: str):
 @app.get("/api/servidores/{nombre}/tiempo_real/lectura")
 def tiempo_real_lectura(nombre: str):
     """
-    Una lectura puntual de CPU/GPU en vivo (SSH directo, no ingesta por
+    Una lectura puntual de CPU/GPU/RAM en vivo (SSH directo, no ingesta por
     lotes). No se persiste en la base de datos -- es efimera, solo se usa
     para refrescar el dashboard mientras "Tiempo Real" este activo.
     """
@@ -207,14 +214,22 @@ def tiempo_real_lectura(nombre: str):
         umbrales_servidor = obtener_umbrales_servidor(cur, servidor_id)
 
     try:
-        filas = tiempo_real.obtener_lectura(nombre)
+        resultado = tiempo_real.obtener_lectura(nombre)
     except tiempo_real.LecturaNoDisponible as e:
         raise HTTPException(status_code=503, detail=str(e))
 
-    for fila in filas:
+    for fila in resultado["sensores"]:
         rangos = umbrales_servidor.get(fila["componente"]) or UMBRALES_DEFAULT.get(fila["componente"])
         fila["estado"] = calcular_estado(rangos, float(fila["temperatura_c"]))
-    return filas
+
+    memoria = resultado["memoria"]
+    if memoria is not None:
+        rangos_ram = umbrales_servidor.get("ram") or UMBRALES_DEFAULT["ram"]
+        rangos_swap = umbrales_servidor.get("swap") or UMBRALES_DEFAULT["swap"]
+        memoria["estado"] = calcular_estado(rangos_ram, memoria["porcentaje"])
+        memoria["swap_estado"] = calcular_estado(rangos_swap, memoria["swap_porcentaje"])
+
+    return {"sensores": resultado["sensores"], "memoria": memoria, "medido_en": resultado["medido_en"]}
 
 
 @app.get("/api/servidores/{nombre}/hardware")

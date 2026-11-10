@@ -382,7 +382,10 @@ mensaje claro, en vez de intentar una ruta equivocada en silencio.
 curl -s http://192.168.192.205:8000/api/servidores/<companero_1>/tiempo_real/disponible
 # {"disponible":true,"motivo":null}
 curl -s http://192.168.192.205:8000/api/servidores/<companero_1>/tiempo_real/lectura
-# [{"componente":"cpu","sensor":"...","temperatura_c":...,"medido_en":"...","estado":"verde"}, ...]
+# {"sensores":[{"componente":"cpu","sensor":"...","temperatura_c":...,"medido_en":"...","estado":"verde"}, ...],
+#  "memoria":{"total_mb":...,"usado_mb":...,"porcentaje":...,"estado":"verde",
+#             "swap_total_mb":...,"swap_usado_mb":...,"swap_porcentaje":...,"swap_estado":"verde"},
+#  "medido_en":"..."}
 ```
 
 Si falla, el mensaje de error distingue si fue el gateway el que no contestó (red/SSH) o el

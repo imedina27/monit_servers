@@ -164,13 +164,18 @@ def _leer_cpu_gpu(cliente):
     return cpu, gpu
 
 
-def _empaquetar(cpu, gpu, medido_en=None):
+def _leer_memoria(cliente):
+    salida_meminfo, _ = _ejecutar(cliente, parseo_sensores.COMANDO_MEMINFO_SSH)
+    return parseo_sensores.parsear_meminfo(salida_meminfo) if salida_meminfo else None
+
+
+def _empaquetar(cpu, gpu, memoria=None, medido_en=None):
     medido_en = medido_en or datetime.now(timezone.utc).isoformat()
     filas = [{"componente": "cpu", "sensor": sensor, "temperatura_c": valor, "medido_en": medido_en}
               for sensor, valor in cpu.items()]
     filas += [{"componente": "gpu", "sensor": sensor, "temperatura_c": valor, "medido_en": medido_en}
               for sensor, valor in gpu.items()]
-    return filas
+    return {"sensores": filas, "memoria": memoria, "medido_en": medido_en}
 
 
 # ─── Pool de sesiones SSH (reusadas mientras "Tiempo Real" este activo) ───────
@@ -242,11 +247,12 @@ def _leer_directo(nombre, host_info):
     cliente = _obtener_sesion(clave, host_info, nombre)
     try:
         cpu, gpu = _leer_cpu_gpu(cliente)
+        memoria = _leer_memoria(cliente)
     except Exception as e:
         _descartar_sesion(clave)
         raise LecturaNoDisponible(f"error leyendo '{nombre}': {e}") from e
 
-    resultado = _empaquetar(cpu, gpu)
+    resultado = _empaquetar(cpu, gpu, memoria)
     _guardar_cache(clave, resultado)
     return resultado
 
@@ -285,6 +291,9 @@ def _leer_companero(nombre, nombre_gateway, gateway_info):
     except json.JSONDecodeError as e:
         raise LecturaNoDisponible(f"respuesta invalida de '{nombre_gateway}' para '{nombre}': {e}") from e
 
-    resultado = _empaquetar(datos.get("cpu", {}), datos.get("gpu", {}), medido_en=datos.get("medido_en"))
+    resultado = _empaquetar(
+        datos.get("cpu", {}), datos.get("gpu", {}),
+        memoria=datos.get("ram"), medido_en=datos.get("medido_en"),
+    )
     _guardar_cache(clave_cache, resultado)
     return resultado

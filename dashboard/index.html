@@ -52,6 +52,19 @@
             </div>
         </section>
 
+        <!-- Barras de RAM/Swap "en vivo" -- solo existen mientras el boton
+             "Tiempo Real" esta activo (ver activarTiempoReal/tickTiempoReal en
+             app.js). Oculto por defecto; se revela animado con la primera
+             lectura que llega, y lo de abajo (grafica, uso de disco) se
+             desplaza solo al expandirse -- se deja fuera de #seccion-actual a
+             proposito para que aparezca despues de las tarjetas/controles,
+             justo antes de "Temperatura CPU/GPU". -->
+        <div id="tiempo-real-memoria" class="tiempo-real-memoria" hidden>
+            <div class="tiempo-real-memoria__interior">
+                <div id="memoria-contenido"></div>
+            </div>
+        </div>
+
         <!-- En pantallas grandes, app.js mueve este bloque a #reservado (columna
              izquierda) y lo deja siempre abierto; en pantallas normales se queda
              aqui como desplegable colapsado. -->
