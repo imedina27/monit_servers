@@ -1266,6 +1266,11 @@ function activarTiempoReal() {
     boton.innerHTML = `<span class="boton-actualizar__icono">●</span> Desactivar`;
     inputIntervalo.disabled = true;
     document.getElementById("boton-actualizar").disabled = true;
+    // Los chips de agrupacion recargan historico/disco por su cuenta (ver el
+    // listener de #chips-agrupacion mas abajo) -- sin deshabilitarlos, un
+    // clic mientras "Tiempo Real" esta activo pisa la grafica en vivo con
+    // historico a medio cargar.
+    document.querySelectorAll("#chips-agrupacion .chip").forEach(b => b.disabled = true);
 
     tickTiempoReal();
     estado.tiempoRealIntervaloId = setInterval(tickTiempoReal, segundos * 1000);
@@ -1282,6 +1287,7 @@ function desactivarTiempoReal() {
     boton.innerHTML = `<span class="boton-actualizar__icono">●</span> Tiempo Real`;
     document.getElementById("tiempo-real-intervalo").disabled = false;
     document.getElementById("boton-actualizar").disabled = false;
+    document.querySelectorAll("#chips-agrupacion .chip").forEach(b => b.disabled = false);
 
     restaurarGraficaNormal();
     ocultarMemoriaTiempoReal();

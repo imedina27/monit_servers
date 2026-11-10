@@ -822,6 +822,10 @@ th {
     border-color: var(--acento);
     font-weight: 600;
 }
+.chip:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
 
 .grafica-contenedor {
     background-color: var(--superficie);
