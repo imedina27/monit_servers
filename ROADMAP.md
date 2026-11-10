@@ -871,6 +871,12 @@ mientras "Tiempo Real" está activo, con un estilo de barra inspirado en `htop`.
   autoexplicativa) — reportado por el usuario al ver la función ya desplegada. Se agregó
   una leyenda chiquita debajo de la barra (mismo patrón visual que la leyenda de la
   gráfica de CPU/GPU).
+- **Bug real encontrado por el usuario**: los chips "Por hora/día/mes" no se
+  deshabilitaban mientras "Tiempo Real" estaba activo (a diferencia del botón
+  "Actualizar" y el input de segundos, que sí) — un clic ahí disparaba
+  `cargarHistorico()`/`cargarUsoDiscoHistorico()` y pisaba la gráfica en vivo con
+  histórico a medio cargar. Corregido deshabilitando los 3 chips al activar "Tiempo
+  Real" (y reactivándolos al salir), mismo criterio que los otros controles.
 
 **Paso 23 cerrado.**
 
