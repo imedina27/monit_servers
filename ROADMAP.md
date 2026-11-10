@@ -864,6 +864,14 @@ mientras "Tiempo Real" está activo, con un estilo de barra inspirado en `htop`.
   (compañero vía `quantumdata`, 96.2GB, 18.8% — de paso confirmó también el semáforo de
   GPU ya existente, con su GPU real en ámbar a 75°C).
 
+### Ajuste tras la primera revisión en producción ✅
+
+- **Leyenda de colores agregada a la barra de RAM**: los 3 segmentos (usado/buffers/cache)
+  no se entendían solos, a diferencia de la barra de Swap (un solo color + %,
+  autoexplicativa) — reportado por el usuario al ver la función ya desplegada. Se agregó
+  una leyenda chiquita debajo de la barra (mismo patrón visual que la leyenda de la
+  gráfica de CPU/GPU).
+
 **Paso 23 cerrado.**
 
 ## Pendiente de decidir

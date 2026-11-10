@@ -30,6 +30,8 @@ Versionado: [SemVer](https://semver.org/lang/es/) (`vMAJOR.MINOR.PATCH`).
 - `import ssh_lectura_directa` fallaba dentro de Docker: `uvicorn backend.main:app` carga
   `backend` como paquete, así que su propio directorio no queda en `sys.path`
   automáticamente — corregido con un `sys.path.insert` explícito.
+- La barra de RAM (paso 23) no tenía leyenda — sus 3 colores (usado/buffers/cache) no se
+  entendían solos, a diferencia de la barra de Swap (un solo color + %).
 - `/api/servidores/{nombre}/historico` y `/disco/historico` ya no agregaban TODO el
   histórico de la tabla en cada carga — en servidores con meses de datos (`DEVELOP`,
   `MINI_LENOVO`) eso tardaba 1.5-3.4s por clic en el árbol, dejando la info del servidor
