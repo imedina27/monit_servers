@@ -854,6 +854,16 @@ mientras "Tiempo Real" está activo, con un estilo de barra inspirado en `htop`.
   con datos de ejemplo — los 3 casos (directo, compañero-vía-gateway real, sin ruta)
   validados de nuevo end-to-end, incluyendo el cálculo de semáforo contra Postgres real.
 
+### Desplegado a producción ✅ (2026-11-09)
+
+- `docker compose up -d --build backend` en DEVELOP (rebuild limpio, sin crash-loop esta
+  vez); `comun/` y `relay/leer_companero.py` resubidos por `scp` a los 2 gateways reales
+  (`apiman-fase1`, `quantumdata`), mismo procedimiento que el paso 22.
+- Confirmado con datos reales en los 3 casos: `apiman-fase1` (directo, 31.9GB RAM, 10.2%
+  en uso), `apiman-fase2` (compañero vía `apiman-fase1`, 128.7GB, 24.2%), `colima00`
+  (compañero vía `quantumdata`, 96.2GB, 18.8% — de paso confirmó también el semáforo de
+  GPU ya existente, con su GPU real en ámbar a 75°C).
+
 **Paso 23 cerrado.**
 
 ## Pendiente de decidir
