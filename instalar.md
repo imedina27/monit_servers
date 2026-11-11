@@ -482,36 +482,66 @@ Descarga el `.json` a tu máquina (scp/SFTP). Si se corrió con `sudo`, puede qu
 `root` — corrige con `sudo chown <tu_usuario>:<tu_usuario> <hostname>.json` antes de bajarlo si
 tu cliente de SFTP se queja de permisos.
 
-### Importarlo a Postgres (vía Docker, en DEVELOP)
+### Investiga el umbral ANTES de cargar nada
+
+El umbral de temperatura **no se adivina** — se investiga por modelo real de CPU/GPU (TCASE
+oficial en Intel ARK / AMD, o "GPU Max Operating Temperature" de la hoja de datos de NVIDIA;
+ver `ROADMAP.md`, sección "Pendiente de decidir", para el criterio completo y ejemplos ya
+resueltos). Sin un umbral propio, el servidor usa el default genérico de `backend/main.py`
+(CPU 70/85°C, GPU 75/85°C) — correcto solo por casualidad, no por diseño.
+
+### Cargar hardware + umbrales a Postgres (vía Docker, en DEVELOP)
 
 El puerto de Postgres en DEVELOP no está expuesto a la red, así que esto se corre **dentro**
-del contenedor del backend (que ya tiene `DB_HOST=postgres` configurado):
+del contenedor del backend (que ya tiene `DB_HOST=postgres` configurado). Copia el script y el
+`.json` una sola vez:
 
 ```bash
 docker cp /opt/quantum/monit-servers-v2/db/gestionar_servidor.py \
     monit-servers-v2-backend:/tmp/gestionar_servidor.py
 
 docker cp <hostname>.json monit-servers-v2-backend:/tmp/<hostname>.json
+```
 
-cd /opt/quantum/monit-servers-v2/docker
-docker compose exec backend python /tmp/gestionar_servidor.py importar /tmp/<hostname>.json
+**`alta`** (recomendado) carga hardware y umbral de CPU en un solo comando, sin preguntar nada
+— sobreescribe si el servidor ya tenía datos cargados antes (igual que `importar`):
+
+```bash
+docker exec monit-servers-v2-backend python /tmp/gestionar_servidor.py alta /tmp/<hostname>.json --cpu <VERDE> <AMBAR>
+# si el servidor SI tiene GPU, agrega al final: --gpu <VERDE> <AMBAR>
+```
+
+Ejemplo real (`obispo`, Intel Xeon Gold 6242, TCASE oficial 85°C, sin GPU):
+
+```bash
+docker exec monit-servers-v2-backend python /tmp/gestionar_servidor.py alta /tmp/obispo.json --cpu 70 85
 ```
 
 Si da "No existe ningún servidor que coincida con el hostname...": revisa que el `nombre` del
 inventario coincida con el hostname real del servidor, y que ya hayas disparado la ingesta al
 menos una vez (el servidor debe existir ya en la tabla `servidores`).
 
-### Umbrales de temperatura (opcional)
-
-Sin esto, el servidor usa el default genérico (CPU 70/85°C, GPU 75/85°C en `backend/main.py`).
-Para poner un umbral propio (recomendado si investigaste el TCASE/Tjmax real):
+**Alternativa granular** — si solo necesitas una de las dos partes (ej. refrescar el hardware
+tras un cambio físico sin tocar el umbral ya cargado, o ajustar el umbral de un servidor que ya
+tiene hardware importado), los comandos de siempre siguen disponibles por separado:
 
 ```bash
-docker compose exec backend python /tmp/gestionar_servidor.py umbrales <NOMBRE_SERVIDOR>
+# Solo hardware (sobreescribe, sin preguntar nada):
+docker exec monit-servers-v2-backend python /tmp/gestionar_servidor.py importar /tmp/<hostname>.json
+
+# Solo umbrales (interactivo, pide 4 valores en orden -- Enter en blanco deja el default
+# generico para ese componente): CPU verde_max, CPU ambar_max, GPU verde_max, GPU ambar_max.
+docker exec -i monit-servers-v2-backend python /tmp/gestionar_servidor.py umbrales <NOMBRE_SERVIDOR>
 ```
 
-Interactivo, pide 4 valores en orden (Enter en blanco deja el default genérico para ese
-componente): `CPU verde_max`, `CPU ambar_max`, `GPU verde_max`, `GPU ambar_max`.
+### Verificar lo que quedó cargado
+
+```bash
+curl -s http://192.168.192.205:8000/api/servidores/<NOMBRE_SERVIDOR>/hardware | python3 -m json.tool
+```
+
+Confirma `cpu_modelo`/`gpu_modelo` y, dentro de `umbrales`, que los valores sean los que
+investigaste (no el default genérico, salvo que eso sea justo lo que querías).
 
 ---
 

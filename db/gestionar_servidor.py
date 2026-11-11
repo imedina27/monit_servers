@@ -17,6 +17,11 @@ Acciones:
   umbrales <nombre>     Da de alta/modifica los umbrales de temperatura (verde/ambar/rojo).
   baja <nombre>         Elimina un servidor de Postgres (lecturas, hardware, umbrales, todo).
   importar <archivo.json>  Carga el reporte de scripts/extraer_hardware.py (sin preguntar nada).
+  alta <archivo.json> --cpu VERDE AMBAR [--gpu VERDE AMBAR]
+                        Importa el hardware (igual que 'importar', sobreescribe si ya existia)
+                        y de una vez deja los umbrales de temperatura, sin preguntar nada.
+                        --cpu es obligatorio; --gpu solo si el servidor tiene GPU.
+                        Ejemplo: alta obispo.json --cpu 70 85
 
 Si no indicas <nombre>, se te deja elegir entre los servidores existentes.
 El servidor debe existir ya en Postgres (agregalo primero a
@@ -430,6 +435,39 @@ def cmd_importar(conn, ruta_json):
     print(f"\n'{nombre_real}' actualizado desde {ruta_json}.")
 
 
+# ─── Accion: alta ───────────────────────────────────────────────────────────
+def cmd_alta(conn, ruta_json, cpu_umbral, gpu_umbral):
+    """Igual que 'importar' + 'umbrales', pero de una sola corrida y sin
+    preguntar nada -- pensado para dar de alta un servidor nuevo completo
+    (hardware + umbrales) con un solo comando, p.ej. desde un script de
+    despliegue. Sobreescribe lo que ya hubiera, igual que 'importar'."""
+    cmd_importar(conn, ruta_json)
+
+    with open(ruta_json, encoding="utf-8") as f:
+        hostname = json.load(f)["hostname"]
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, nombre FROM servidores WHERE LOWER(nombre) = LOWER(%s)", (hostname,))
+        servidor_id, nombre_real = cur.fetchone()
+
+    def upsert_umbral(componente, verde_max, ambar_max):
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO umbrales (servidor_id, componente, verde_max, ambar_max)
+                   VALUES (%s, %s, %s, %s)
+                   ON CONFLICT (servidor_id, componente) DO UPDATE
+                       SET verde_max = EXCLUDED.verde_max, ambar_max = EXCLUDED.ambar_max""",
+                (servidor_id, componente, verde_max, ambar_max),
+            )
+        print(f"  umbral {componente}: {verde_max}/{ambar_max}")
+
+    upsert_umbral("cpu", *cpu_umbral)
+    if gpu_umbral:
+        upsert_umbral("gpu", *gpu_umbral)
+
+    conn.commit()
+    print(f"\nUmbrales de '{nombre_real}' guardados.")
+
+
 # ─── Accion: baja ──────────────────────────────────────────────────────────
 def limpiar_grupos_vacios(conn, grupo_id):
     """Sube por el arbol borrando grupos que se quedaron sin servidores ni subgrupos."""
@@ -494,7 +532,7 @@ def cmd_baja(conn, nombre):
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("hardware", "umbrales", "baja", "importar"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("hardware", "umbrales", "baja", "importar", "alta"):
         print(USO)
         sys.exit(1)
 
@@ -506,6 +544,33 @@ def main():
             print(USO)
             sys.exit(1)
         cmd_importar(conn, sys.argv[2])
+        conn.close()
+        return
+
+    if accion == "alta":
+        if len(sys.argv) < 3:
+            print(USO)
+            sys.exit(1)
+        ruta_json = sys.argv[2]
+        extra = sys.argv[3:]
+        cpu_umbral = gpu_umbral = None
+        i = 0
+        while i < len(extra):
+            if extra[i] == "--cpu" and i + 2 < len(extra):
+                cpu_umbral = (float(extra[i + 1]), float(extra[i + 2]))
+                i += 3
+            elif extra[i] == "--gpu" and i + 2 < len(extra):
+                gpu_umbral = (float(extra[i + 1]), float(extra[i + 2]))
+                i += 3
+            else:
+                print(f"Argumento invalido o incompleto: '{extra[i]}'.\n")
+                print(USO)
+                sys.exit(1)
+        if cpu_umbral is None:
+            print("Falta --cpu VERDE AMBAR (obligatorio).\n")
+            print(USO)
+            sys.exit(1)
+        cmd_alta(conn, ruta_json, cpu_umbral, gpu_umbral)
         conn.close()
         return
 
